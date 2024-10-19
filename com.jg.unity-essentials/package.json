@@ -1,0 +1,10 @@
+{
+    "name": "com.jg.unity-essentials",
+    "version": "1.0.0",
+    "displayName": "JG - Unity Essentials",
+    "description": "Provides generic structures, object poolers, project set up helpers and other handy editor scripts",
+    "unity": "2020.3", // The minimum version of Unity your package is compatible with.
+    "author": {
+        "name": "Joris Grau"
+    }
+}
