@@ -9,7 +9,10 @@ public class PackageManagerSetup
     private Dictionary<string, bool> toolsPackages = new Dictionary<string, bool>()
     {
         { "JG/UnityEssentials", false },
-        { "JG/SceneManager", false }
+        { "JG/SceneManager", false },
+        { "Demigiant/DOTween", false }
+
+
     };
 
     private Dictionary<string, bool> editorExtensionsPackages = new Dictionary<string, bool>()
@@ -92,6 +95,7 @@ public class PackageManagerSetup
         {
             { "JG/UnityEssentials", "https://github.com/yourname/pooling-system.git#1.0.0" },
             { "JG/SceneManager", "https://github.com/yourname/scene-manager.git#1.0.0" },
+            { "Demigiant/DOTween", "https://github.com/Demigiant/dotween.git" },
             { "OdinInspector", "https://odininspector.com/package-url" },
             { "EditorToolbox", "https://github.com/arimger/Unity-Editor-Toolbox.git#upm" },
             { "Eflatun/SceneReference", "https://github.com/starikcetin/Eflatun.SceneReference.git#upm" },
