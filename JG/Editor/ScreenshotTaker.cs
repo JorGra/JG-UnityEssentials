@@ -15,6 +15,11 @@ namespace JG.Tools.Editor
         private bool openFolderAfterCapture = true;
         private bool isCapturingScreenshot = false;
         private bool saveInAssetsFolder = true;
+        private bool includeUI = true; // Option to include UI or not
+
+        // Foldout state for sections
+        private bool showFileSettings = true;
+        private bool showCaptureSettings = true;
 
         [MenuItem("Tools/Screenshot Tool")]
         public static void ShowWindow()
@@ -39,64 +44,102 @@ namespace JG.Tools.Editor
             customPath = EditorPrefs.GetString("HighResScreenshotTool_CustomPath", customPath);
             openFolderAfterCapture = EditorPrefs.GetBool("HighResScreenshotTool_OpenFolder", openFolderAfterCapture);
             saveInAssetsFolder = EditorPrefs.GetBool("HighResScreenshotTool_SaveInAssets", saveInAssetsFolder);
+            includeUI = EditorPrefs.GetBool("HighResScreenshotTool_IncludeUI", includeUI); // Include UI preference
         }
 
         private void OnGUI()
         {
-            GUILayout.Label("Screenshot Settings", EditorStyles.boldLabel);
+            //GUILayout.Label("Screenshot Tool", EditorStyles.boldLabel);
 
             EditorGUI.BeginChangeCheck();
 
-            screenshotName = EditorGUILayout.TextField("Screenshot Name", screenshotName);
-
-            resolutionMultiplier = EditorGUILayout.IntPopup("Resolution Multiplier",
-                resolutionMultiplier,
-                new string[] { "1x", "2x", "3x" },
-                new int[] { 1, 2, 3 });
-
-            saveInAssetsFolder = EditorGUILayout.Toggle("Save in Assets Folder", saveInAssetsFolder);
-
-            useCustomPath = EditorGUILayout.Toggle("Use Custom Path", useCustomPath);
-
-            if (useCustomPath)
+            if (GUILayout.Button("Capture Screenshot"))
             {
-                EditorGUILayout.BeginHorizontal();
-                customPath = EditorGUILayout.TextField("Custom Path", customPath);
-                if (GUILayout.Button("Browse", GUILayout.Width(60)))
-                {
-                    string defaultPath = saveInAssetsFolder ? Application.dataPath : customPath;
-                    string title = saveInAssetsFolder ? "Choose Screenshot Directory in Assets" : "Choose Screenshot Directory";
+                CaptureScreenshot();
+            }
 
-                    string path = EditorUtility.OpenFolderPanel(title, defaultPath, "");
-                    if (!string.IsNullOrEmpty(path))
+            EditorGUILayout.Space();
+
+            EditorGUILayout.HelpBox(
+                $"Shortcut: {(Application.platform == RuntimePlatform.OSXEditor ? "Cmd" : "Ctrl")} + Alt + S",
+                MessageType.Info);
+
+            // File Settings Section
+            showFileSettings = EditorGUILayout.Foldout(showFileSettings, "File Settings", true);
+            if (showFileSettings)
+            {
+                EditorGUI.indentLevel++;
+
+                screenshotName = EditorGUILayout.TextField("Screenshot Name", screenshotName);
+
+                // Save Path Settings
+                saveInAssetsFolder = EditorGUILayout.Toggle("Save in Assets Folder", saveInAssetsFolder);
+
+                useCustomPath = EditorGUILayout.Toggle("Use Custom Path", useCustomPath);
+
+                if (useCustomPath)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    customPath = EditorGUILayout.TextField("Custom Path", customPath);
+                    if (GUILayout.Button("Browse", GUILayout.Width(60)))
                     {
-                        if (saveInAssetsFolder)
+                        string defaultPath = saveInAssetsFolder ? Application.dataPath : customPath;
+                        string title = saveInAssetsFolder ? "Choose Directory in Assets" : "Choose Directory";
+
+                        string path = EditorUtility.OpenFolderPanel(title, defaultPath, "");
+                        if (!string.IsNullOrEmpty(path))
                         {
-                            if (path.StartsWith(Application.dataPath))
+                            if (saveInAssetsFolder)
                             {
-                                customPath = "Assets" + path.Substring(Application.dataPath.Length);
+                                if (path.StartsWith(Application.dataPath))
+                                {
+                                    customPath = "Assets" + path.Substring(Application.dataPath.Length);
+                                }
+                                else
+                                {
+                                    EditorUtility.DisplayDialog("Invalid Path",
+                                        "When 'Save in Assets Folder' is enabled, please select a folder within the Assets directory.", "OK");
+                                }
                             }
                             else
                             {
-                                EditorUtility.DisplayDialog("Invalid Path",
-                                    "When 'Save in Assets Folder' is enabled, please select a folder within the Assets directory.", "OK");
+                                customPath = path;
                             }
                         }
-                        else
-                        {
-                            customPath = path;
-                        }
                     }
+                    EditorGUILayout.EndHorizontal();
                 }
-                EditorGUILayout.EndHorizontal();
+                else if (saveInAssetsFolder)
+                {
+                    defaultSavePath = EditorGUILayout.TextField("Save Folder", defaultSavePath);
+                }
+
+                openFolderAfterCapture = EditorGUILayout.Toggle("Open Folder After Capture", openFolderAfterCapture);
+
+                EditorGUI.indentLevel--;
             }
-            else if (saveInAssetsFolder)
+
+            EditorGUILayout.Space();
+
+            // Capture Settings Section
+            showCaptureSettings = EditorGUILayout.Foldout(showCaptureSettings, "Capture Settings", true);
+            if (showCaptureSettings)
             {
-                defaultSavePath = EditorGUILayout.TextField("Save Folder", defaultSavePath);
+                EditorGUI.indentLevel++;
+
+                resolutionMultiplier = EditorGUILayout.IntPopup("Resolution Multiplier",
+                    resolutionMultiplier,
+                    new string[] { "1x", "2x", "3x" },
+                    new int[] { 1, 2, 3 });
+
+                includeUI = EditorGUILayout.Toggle("Include UI in Screenshot", includeUI); // Toggle for UI inclusion
+
+                EditorGUI.indentLevel--;
             }
 
-            openFolderAfterCapture = EditorGUILayout.Toggle("Open Folder After Capture", openFolderAfterCapture);
+            EditorGUILayout.Space();
 
+            // Apply changes if any
             if (EditorGUI.EndChangeCheck())
             {
                 // Save preferences
@@ -107,23 +150,22 @@ namespace JG.Tools.Editor
                 EditorPrefs.SetString("HighResScreenshotTool_CustomPath", customPath);
                 EditorPrefs.SetBool("HighResScreenshotTool_OpenFolder", openFolderAfterCapture);
                 EditorPrefs.SetBool("HighResScreenshotTool_SaveInAssets", saveInAssetsFolder);
-            }
-
-            if (GUILayout.Button("Capture Screenshot"))
-            {
-                CaptureScreenshot();
+                EditorPrefs.SetBool("HighResScreenshotTool_IncludeUI", includeUI); // Save UI preference
             }
 
             EditorGUILayout.Space();
-            EditorGUILayout.HelpBox(
-                $"Keyboard Shortcut: {(Application.platform == RuntimePlatform.OSXEditor ? "Cmd" : "Ctrl")} + Alt + S",
-                MessageType.Info);
 
             // Display the full save path
             string fullSavePath = GetFullSavePath();
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Save Location:", EditorStyles.boldLabel);
             EditorGUILayout.SelectableLabel(fullSavePath, EditorStyles.textField, GUILayout.Height(20));
+
+            // Open Screenshot Folder Button
+            if (GUILayout.Button("Open Screenshot Folder"))
+            {
+                OpenScreenshotFolder();
+            }
         }
 
         private string GetFullSavePath()
@@ -139,6 +181,19 @@ namespace JG.Tools.Editor
             else
             {
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Unity Screenshots");
+            }
+        }
+
+        private void OpenScreenshotFolder()
+        {
+            string folderPath = GetFullSavePath();
+            if (Directory.Exists(folderPath))
+            {
+                EditorUtility.RevealInFinder(folderPath);
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("Folder not found", "The screenshot folder does not exist.", "OK");
             }
         }
 
@@ -160,22 +215,30 @@ namespace JG.Tools.Editor
             string filename = $"{screenshotName}_{timestamp}.png";
             string fullPath = Path.Combine(folderPath, filename);
 
-            // Start a coroutine to capture the screenshot at the end of the frame
-            EditorApplication.delayCall += () =>
+            // If you want to include UI and capture everything on screen
+            if (includeUI)
             {
-                try
-                {
-                    CaptureScreenshotInternal(fullPath);
-                }
-                finally
-                {
-                    isCapturingScreenshot = false;
-                }
-            };
+                // Use ScreenCapture to capture everything on the screen
+                ScreenCapture.CaptureScreenshot(fullPath, resolutionMultiplier);
+                Debug.Log($"Screenshot with UI saved: {fullPath}");
+            }
+            else
+            {
+                // If you don't want to include UI, use manual rendering (could also use RenderTexture)
+                CaptureWithoutUI(fullPath);
+            }
+
+            if (openFolderAfterCapture)
+            {
+                EditorUtility.RevealInFinder(fullPath);
+            }
+
+            isCapturingScreenshot = false;
         }
 
-        private void CaptureScreenshotInternal(string fullPath)
+        private void CaptureWithoutUI(string fullPath)
         {
+            // Manual camera rendering code for game view only without UI
             Camera camera = Camera.main;
             if (camera == null)
             {
@@ -188,8 +251,7 @@ namespace JG.Tools.Editor
             int height = (int)Handles.GetMainGameViewSize().y;
 
             // Create a render texture with the multiplied resolution
-            RenderTexture rt = new RenderTexture(width * resolutionMultiplier,
-                height * resolutionMultiplier, 24);
+            RenderTexture rt = new RenderTexture(width * resolutionMultiplier, height * resolutionMultiplier, 24);
             RenderTexture prev = camera.targetTexture;
             RenderTexture.active = rt;
             camera.targetTexture = rt;
@@ -212,17 +274,7 @@ namespace JG.Tools.Editor
             File.WriteAllBytes(fullPath, bytes);
             DestroyImmediate(screenshot);
 
-            if (saveInAssetsFolder)
-            {
-                AssetDatabase.Refresh();
-            }
-
-            Debug.Log($"Screenshot saved: {fullPath}");
-
-            if (openFolderAfterCapture)
-            {
-                EditorUtility.RevealInFinder(fullPath);
-            }
+            Debug.Log($"Screenshot without UI saved: {fullPath}");
         }
     }
 }
