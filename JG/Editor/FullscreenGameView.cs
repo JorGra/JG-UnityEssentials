@@ -30,21 +30,19 @@ public static class FullscreenGameView
             return;
         }
 
-        if (ShowToolbarProperty == null)
-        {
-            Debug.LogWarning("GameView.showToolbar property not found.");
-        }
-
+        
+        
         if (instance != null)
         {
             instance.Close();
             instance = null;
+
+            EditorApplication.delayCall += ApplyToolbarPatches;
         }
         else
         {
             instance = (EditorWindow)ScriptableObject.CreateInstance(GameViewType);
 
-            ShowToolbarProperty?.SetValue(instance, False);
 
             var gameViewSizesInstance = GetGameViewSizesInstance();
             int monitorWidth = (int)(Screen.currentResolution.width / EditorGUIUtility.pixelsPerPoint);
@@ -61,9 +59,17 @@ public static class FullscreenGameView
             instance.ShowPopup();
             instance.position = fullscreenRect;
             instance.Focus();
+
+            EditorApplication.delayCall += ApplyToolbarPatches;
+
         }
     }
 
+    private static void ApplyToolbarPatches()
+    {
+        // Apply the patches here, now that Unity had a frame to finalize the view
+        GameViewToolbarHiderAlternative.ToggleAlternateToolbarRemoval();
+    }
     private static object GetGameViewSizesInstance()
     {
         var sizesType = typeof(Editor).Assembly.GetType("UnityEditor.GameViewSizes");
@@ -102,7 +108,7 @@ public static class FullscreenGameView
         return 0;
     }
 
-    [MenuItem("Window/LayoutShortcuts/Default %q", false, 2)]
+    [MenuItem("Window/LayoutShortcuts/Default", false, 2)]
     static void DefaultLayout()
     {
         EditorApplication.ExecuteMenuItem("Window/Layouts/Default");
