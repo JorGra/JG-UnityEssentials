@@ -22,17 +22,15 @@ public class CustomBuildWindow : EditorWindow
 
     private string customVersion = "";
 
-    // Android-specific bundle version code
-    private int androidBundleVersionCode = 1;
-    private bool incrementAndroidBundleVersion = false;
-
     private static BuildPlayerOptions cachedBuildPlayerOptions;
 
     private string currentFullVersion = "";
 
+    // Use InitializeOnLoadMethod to register the build handler
     [InitializeOnLoadMethod]
     private static void Init()
     {
+        // Register the build handler
         BuildPlayerWindow.RegisterBuildPlayerHandler(BuildPlayerHandler);
     }
 
@@ -45,6 +43,7 @@ public class CustomBuildWindow : EditorWindow
 
     private void OnEnable()
     {
+        // Load current version
         LoadCurrentVersion();
     }
 
@@ -75,22 +74,11 @@ public class CustomBuildWindow : EditorWindow
         GUILayout.Label("Custom Version (Optional)", EditorStyles.boldLabel);
         customVersion = EditorGUILayout.TextField("Custom Version:", customVersion);
 
-        GUILayout.Space(10);
-
-        // Android bundle version code increment option
-        GUILayout.Label("Android Bundle Version Code", EditorStyles.boldLabel);
-        androidBundleVersionCode = EditorGUILayout.IntField("Bundle Version Code:", androidBundleVersionCode);
-        incrementAndroidBundleVersion = EditorGUILayout.Toggle("Increment Android Bundle Version?", incrementAndroidBundleVersion);
-
         GUILayout.Space(20);
 
         if (GUILayout.Button("Build"))
         {
             UpdateVersion();
-            if (incrementAndroidBundleVersion)
-            {
-                IncrementAndroidBundleVersion();
-            }
             BuildProject();
             Close();
         }
@@ -99,8 +87,9 @@ public class CustomBuildWindow : EditorWindow
     private void LoadCurrentVersion()
     {
         string currentVersion = PlayerSettings.bundleVersion;
-        currentFullVersion = currentVersion;
+        currentFullVersion = currentVersion; // Store the full current version to display in the GUI
 
+        // Remove development stage prefix
         string versionWithoutStage = currentVersion;
         foreach (var stage in developmentStages)
         {
@@ -122,17 +111,16 @@ public class CustomBuildWindow : EditorWindow
         }
         else
         {
+            // Default version numbers
             major = 1;
             minor = 0;
             build = 0;
         }
-
-        // Load the current Android bundle version code
-        androidBundleVersionCode = PlayerSettings.Android.bundleVersionCode;
     }
 
     private void UpdateVersion()
     {
+        // Increment version based on selection
         switch (versionIncrement)
         {
             case VersionIncrement.Build:
@@ -140,17 +128,19 @@ public class CustomBuildWindow : EditorWindow
                 break;
             case VersionIncrement.Minor:
                 minor++;
-                build = 0;
+                build = 0; // Reset build number
                 break;
             case VersionIncrement.Major:
                 major++;
-                minor = 0;
-                build = 0;
+                minor = 0; // Reset minor
+                build = 0; // Reset build
                 break;
         }
 
+        // If custom version is set, override
         if (!string.IsNullOrEmpty(customVersion))
         {
+            // Assume customVersion is in the format major.minor.build
             string[] versionParts = customVersion.Split('.');
             if (versionParts.Length >= 3)
             {
@@ -165,23 +155,20 @@ public class CustomBuildWindow : EditorWindow
         }
 
         string newVersion = $"{major}.{minor}.{build}";
+
+        // Add development stage
         string developmentStage = developmentStages[selectedDevelopmentStageIndex].ToLower().Replace(" ", "-");
         newVersion = $"{developmentStage}-{newVersion}";
 
+        // Update PlayerSettings
         PlayerSettings.bundleVersion = newVersion;
 
         Debug.Log("Updated version to: " + newVersion);
     }
 
-    private void IncrementAndroidBundleVersion()
-    {
-        androidBundleVersionCode++;
-        PlayerSettings.Android.bundleVersionCode = androidBundleVersionCode;
-        Debug.Log("Updated Android bundle version code to: " + androidBundleVersionCode);
-    }
-
     private void BuildProject()
     {
+        // Use the cached BuildPlayerOptions
         if (string.IsNullOrEmpty(cachedBuildPlayerOptions.locationPathName))
         {
             string defaultName = PlayerSettings.productName;
@@ -195,6 +182,7 @@ public class CustomBuildWindow : EditorWindow
             cachedBuildPlayerOptions.locationPathName = $"{path}/{defaultName}{extension}";
         }
 
+        // Build the project
         BuildReport report = BuildPipeline.BuildPlayer(cachedBuildPlayerOptions);
         BuildSummary summary = report.summary;
 
