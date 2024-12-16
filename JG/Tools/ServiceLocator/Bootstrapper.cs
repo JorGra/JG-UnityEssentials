@@ -1,15 +1,13 @@
 ﻿using JG.Util.Extensions;
 using UnityEngine;
 
-
-namespace ServiceLocator
+namespace UnityServiceLocator
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(ServiceLocator))]
     public abstract class Bootstrapper : MonoBehaviour
     {
         ServiceLocator container;
-
         internal ServiceLocator Container => container.OrNull() ?? (container = GetComponent<ServiceLocator>());
 
         bool hasBeenBootstrapped;
@@ -24,26 +22,5 @@ namespace ServiceLocator
         }
 
         protected abstract void Bootstrap();
-    }
-
-    [AddComponentMenu("ServiceLocator/ServiceLocator Global")]
-    public class ServiceLocatorGlobalBootstrapper : Bootstrapper
-    {
-        [SerializeField] bool dontDestroyOnLoad = true;
-
-        protected override void Bootstrap()
-        {
-            Container.ConfigureAsGlobal(dontDestroyOnLoad);
-        }
-    }
-
-
-    [AddComponentMenu("ServiceLocator/ServiceLocator Scene")]
-    public class ServiceLocatorSceneBootstrapper : Bootstrapper
-    {
-        protected override void Bootstrap()
-        {
-            Container.ConfigureForScene();
-        }
     }
 }

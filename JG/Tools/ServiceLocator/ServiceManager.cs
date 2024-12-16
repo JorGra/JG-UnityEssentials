@@ -1,25 +1,23 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace ServiceLocator
+namespace UnityServiceLocator
 {
-
     public class ServiceManager
     {
         readonly Dictionary<Type, object> services = new Dictionary<Type, object>();
         public IEnumerable<object> RegisteredServices => services.Values;
 
-
         public bool TryGet<T>(out T service) where T : class
         {
             Type type = typeof(T);
-            if (services.TryGetValue(type, out object s))
+            if (services.TryGetValue(type, out object obj))
             {
-                service = s as T;
+                service = obj as T;
                 return true;
             }
+
             service = null;
             return false;
         }
@@ -27,11 +25,12 @@ namespace ServiceLocator
         public T Get<T>() where T : class
         {
             Type type = typeof(T);
-            if (services.TryGetValue(type, out object service))
+            if (services.TryGetValue(type, out object obj))
             {
-                return service as T;
+                return obj as T;
             }
-            throw new ArgumentException($"ServiceManager.Get: Service of type {type.FullName} not found");
+
+            throw new ArgumentException($"ServiceManager.Get: Service of type {type.FullName} not registered");
         }
 
         public ServiceManager Register<T>(T service)
@@ -40,8 +39,9 @@ namespace ServiceLocator
 
             if (!services.TryAdd(type, service))
             {
-                Debug.Log($"ServiceManager.Register: Service of type {type.FullName} already registered");
+                Debug.LogError($"ServiceManager.Register: Service of type {type.FullName} already registered");
             }
+
             return this;
         }
 
@@ -49,16 +49,15 @@ namespace ServiceLocator
         {
             if (!type.IsInstanceOfType(service))
             {
-                throw new ArgumentException("Type of service deos not match type of service interface", nameof(service));
+                throw new ArgumentException("Type of service does not match type of service interface", nameof(service));
             }
 
             if (!services.TryAdd(type, service))
             {
-                Debug.Log($"ServiceManager.Register: Service of type {type.FullName} already registered");
+                Debug.LogError($"ServiceManager.Register: Service of type {type.FullName} already registered");
             }
 
             return this;
         }
     }
-
 }
