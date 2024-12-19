@@ -33,23 +33,28 @@ public static class ProjectSetup
         Packages.InstallPackages(packages);
     }
 
+    public static void InstallPackages(string[] packages)
+    {
+        Packages.InstallPackages(packages);
+    }
+
 
     [MenuItem("Tools/Setup/Create Folders")]
     public static void CreateFolders()
     {
-        //Folders.Create("_Project", "Animation", "Art", "Materials", "Prefabs", "Scripts/Tests", "Scripts/Tests/Editor", "Scripts/Tests/Runtime");
+        Folders.Create("1. Import", "2. Materials", "3. Prefabs", "4. Scripts", "5. Scenes", "6. Particles", "7. Animation", "8. Settings");
         Refresh();
-        Folders.Move("_Project", "Scenes");
-        Folders.Move("_Project", "Settings");
+        Folders.Move("5. Scenes", "Scenes");
+        Folders.Move("8. Settings", "Settings");
         Folders.Delete("TutorialInfo");
         Refresh();
 
-        MoveAsset("Assets/InputSystem_Actions.inputactions", "Assets/_Project/Settings/InputSystem_Actions.inputactions");
+        MoveAsset("Assets/InputSystem_Actions.inputactions", "Assets/8. Settings/Settings/InputSystem_Actions.inputactions");
         DeleteAsset("Assets/Readme.asset");
         Refresh();
 
         // Optional: Disable Domain Reload
-        // EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
+        EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
     }
 
     static class Assets
