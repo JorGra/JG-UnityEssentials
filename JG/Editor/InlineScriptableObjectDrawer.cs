@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-[CustomPropertyDrawer(typeof(ScriptableObject), true)]
+//[CustomPropertyDrawer(typeof(ScriptableObject), true)]
 public class InlineScriptableObjectDrawer : PropertyDrawer
 {
     private bool foldout;
