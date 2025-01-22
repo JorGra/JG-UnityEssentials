@@ -1,15 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using System;
-using System.Reflection;
-using System.Linq;
-using System.Collections.Generic;
 
 [CustomPropertyDrawer(typeof(ScriptableObject), true)]
 public class CombinedScriptableObjectDrawer : PropertyDrawer
 {
     private bool foldout;
     private Editor editorInstance;
+
+    // Dictionary to remember each property's foldout state across inspector draws
+    private static Dictionary<string, bool> foldoutStates = new Dictionary<string, bool>();
 
     private const float ButtonWidth = 25f;
 
@@ -19,6 +22,19 @@ public class CombinedScriptableObjectDrawer : PropertyDrawer
 
     public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
     {
+        // 1) Generate a unique key for this property to store/retrieve foldout state.
+        //    We combine the current object’s InstanceID and property path.
+        string key = property.serializedObject.targetObject.GetInstanceID() + "_" + property.propertyPath;
+
+        // 2) Before drawing, see if we already have a stored foldout state. If we do,
+        //    update our local 'foldout' from the dictionary. Otherwise, keep the
+        //    private foldout's current value (default false).
+        bool storedFoldout;
+        if (foldoutStates.TryGetValue(key, out storedFoldout))
+        {
+            foldout = storedFoldout;
+        }
+
         // Reserve space for the foldout, the object field, and the "+" button
         float foldoutWidth = 15f;
         Rect foldoutRect = new Rect(position.x, position.y, foldoutWidth, EditorGUIUtility.singleLineHeight);
@@ -31,7 +47,13 @@ public class CombinedScriptableObjectDrawer : PropertyDrawer
         Rect buttonRect = new Rect(objectFieldRect.xMax + 5, position.y, ButtonWidth, EditorGUIUtility.singleLineHeight);
 
         // Foldout arrow
-        foldout = EditorGUI.Foldout(foldoutRect, foldout, GUIContent.none);
+        bool newFoldout = EditorGUI.Foldout(foldoutRect, foldout, GUIContent.none);
+        if (newFoldout != foldout)
+        {
+            foldout = newFoldout;
+            // 3) Whenever the foldout is toggled, store the new state in the dictionary
+            foldoutStates[key] = foldout;
+        }
 
         // Object field
         EditorGUI.PropertyField(objectFieldRect, property, label, false);
@@ -134,6 +156,16 @@ public class CombinedScriptableObjectDrawer : PropertyDrawer
     {
         // Start with the standard height for a single-line property
         float height = EditorGUIUtility.singleLineHeight;
+
+        // 1) Generate the same key we used in OnGUI
+        string key = property.serializedObject.targetObject.GetInstanceID() + "_" + property.propertyPath;
+
+        // 2) See if we have a recorded foldout state. If yes, override the local foldout.
+        bool storedFoldout;
+        if (foldoutStates.TryGetValue(key, out storedFoldout))
+        {
+            foldout = storedFoldout;
+        }
 
         // If the foldout is expanded, add the height of all child properties
         if (property.objectReferenceValue != null && foldout)

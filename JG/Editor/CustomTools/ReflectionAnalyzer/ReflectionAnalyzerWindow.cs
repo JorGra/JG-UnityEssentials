@@ -4,7 +4,7 @@ using System;
 using System.Reflection;
 using System.Linq;
 
-public class ReflectionHelperWindow : EditorWindow
+public class ReflectionAnalyzerWindow : EditorWindow
 {
     private string className = "UnityEngine.Transform"; // Default example class
     private Type selectedType = null;
@@ -13,15 +13,15 @@ public class ReflectionHelperWindow : EditorWindow
     private Vector2 methodScrollPos;
     private Vector2 propertyScrollPos;
 
-    [MenuItem("Tools/Reflection Helper")]
+    [MenuItem("Tools/Reflection Analyzer")]
     public static void ShowWindow()
     {
-        GetWindow<ReflectionHelperWindow>("Reflection Helper");
+        GetWindow<ReflectionAnalyzerWindow>("Reflection Analyzer");
     }
 
     private void OnGUI()
     {
-        GUILayout.Label("Reflection Helper", EditorStyles.boldLabel);
+        GUILayout.Label("Reflection Analyzer", EditorStyles.boldLabel);
 
         // Input field for class name
         className = EditorGUILayout.TextField("Class Name (Namespace.ClassName)", className);
