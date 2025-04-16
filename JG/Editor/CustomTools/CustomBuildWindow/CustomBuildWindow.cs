@@ -1,4 +1,5 @@
-using System.IO;
+﻿using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -23,6 +24,9 @@ public class CustomBuildWindow : EditorWindow
 
     private string customVersion = "";
 
+    // Toggle for enabling/disabling version increment
+    private bool enableVersionIncrement = true;
+
     // Android-specific bundle version code
     private int androidBundleVersionCode = 1;
     private bool incrementAndroidBundleVersion = false;
@@ -37,6 +41,14 @@ public class CustomBuildWindow : EditorWindow
     // The BuildPlayerOptions from the normal Build dialog
     private static BuildPlayerOptions cachedBuildPlayerOptions;
 
+    // Scroll position for the window
+    private Vector2 scrollPosition;
+
+    // Style variables
+    private GUIStyle headerStyle;
+    private GUIStyle subHeaderStyle;
+    private GUIStyle boxStyle;
+
     [InitializeOnLoadMethod]
     private static void Init()
     {
@@ -48,6 +60,7 @@ public class CustomBuildWindow : EditorWindow
     {
         cachedBuildPlayerOptions = options;
         var window = GetWindow<CustomBuildWindow>("Build Version");
+        window.minSize = new Vector2(450, 500);
         window.Show();
     }
 
@@ -56,92 +69,243 @@ public class CustomBuildWindow : EditorWindow
         LoadCurrentVersion();
     }
 
+    private void InitStyles()
+    {
+        if (headerStyle == null)
+        {
+            headerStyle = new GUIStyle(EditorStyles.boldLabel);
+            headerStyle.fontSize = 14;
+            headerStyle.margin = new RectOffset(0, 0, 10, 5);
+        }
+
+        if (subHeaderStyle == null)
+        {
+            subHeaderStyle = new GUIStyle(EditorStyles.boldLabel);
+            subHeaderStyle.margin = new RectOffset(0, 0, 6, 2);
+        }
+
+        if (boxStyle == null)
+        {
+            boxStyle = new GUIStyle(EditorStyles.helpBox);
+            boxStyle.padding = new RectOffset(10, 10, 10, 10);
+            boxStyle.margin = new RectOffset(0, 0, 8, 8);
+        }
+    }
+
     private void OnGUI()
     {
-        //
-        // CURRENT VERSION DISPLAY
-        //
-        GUILayout.Label("Current Version", EditorStyles.boldLabel);
-        GUILayout.Label($"Version: {currentFullVersion}", EditorStyles.wordWrappedLabel);
-        GUILayout.Label($"iOS Build: {iosBuildNumber}");
-        GUILayout.Label($"Android Bundle Version: {androidBundleVersionCode}");
+        InitStyles();
 
-        //
-        // NEXT VERSION PREVIEW
-        //
-        GUILayout.Space(8);
-        GUILayout.Label("Next Version Preview", EditorStyles.boldLabel);
-        GUILayout.Label(GetNextVersionPreview(), EditorStyles.wordWrappedLabel);
+        // Begin scrollable area
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-        GUILayout.Space(15);
+        // Use larger, prettier sections
+        DrawCurrentVersionSection();
+        DrawVersionIncrementToggleSection();
+        DrawNextVersionPreviewSection();
+        DrawVersionIncrementOptionsSection();
+        DrawPlatformSpecificSection();
+        DrawBuildButtonSection();
 
-        //
-        // VERSION INCREMENT OPTIONS
-        //
-        GUILayout.Label("Version Increment Options", EditorStyles.boldLabel);
-        versionIncrement = (VersionIncrement)EditorGUILayout.EnumPopup("Increment:", versionIncrement);
+        // End scrollable area
+        EditorGUILayout.EndScrollView();
+    }
 
-        GUILayout.Space(10);
-
-        GUILayout.Label("Current Version Numbers", EditorStyles.boldLabel);
-        major = EditorGUILayout.IntField("Major:", major);
-        minor = EditorGUILayout.IntField("Minor:", minor);
-        build = EditorGUILayout.IntField("Build:", build);
-
-        GUILayout.Space(10);
-
-        GUILayout.Label("Development Stage", EditorStyles.boldLabel);
-        selectedDevelopmentStageIndex = EditorGUILayout.Popup("Stage:", selectedDevelopmentStageIndex, developmentStages);
-
-        GUILayout.Space(10);
-
-        GUILayout.Label("Custom Version (Optional)", EditorStyles.boldLabel);
-        customVersion = EditorGUILayout.TextField("Custom Version:", customVersion);
-
-        GUILayout.Space(10);
-
-        //
-        // ANDROID BUNDLE VERSION CODE
-        //
-        GUILayout.Label("Android Bundle Version Code", EditorStyles.boldLabel);
-        androidBundleVersionCode = EditorGUILayout.IntField("Bundle Version Code:", androidBundleVersionCode);
-        incrementAndroidBundleVersion = EditorGUILayout.Toggle("Increment Android Bundle Version?", incrementAndroidBundleVersion);
-
-        GUILayout.Space(10);
-
-        //
-        // IOS BUILD NUMBER
-        //
-        GUILayout.Label("iOS Build Number", EditorStyles.boldLabel);
-        iosBuildNumber = EditorGUILayout.IntField("iOS Build Number:", iosBuildNumber);
-        incrementIOSBuildNumber = EditorGUILayout.Toggle("Increment iOS Build Number?", incrementIOSBuildNumber);
-
-        GUILayout.Space(20);
-
-        //
-        // BUILD BUTTON
-        //
-        if (GUILayout.Button("Build"))
+    private void DrawCurrentVersionSection()
+    {
+        EditorGUILayout.BeginVertical(boxStyle);
         {
-            // 1. Update the main version string for the chosen target
-            UpdateVersion();
+            GUILayout.Label("Current Version", headerStyle);
 
-            // 2. If the active build target is Android, also update the Android bundle version if toggled
-            if (cachedBuildPlayerOptions.target == BuildTarget.Android && incrementAndroidBundleVersion)
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             {
-                IncrementAndroidBundleVersion();
+                EditorGUILayout.LabelField("Version:", currentFullVersion);
+                EditorGUILayout.LabelField("iOS Build:", iosBuildNumber.ToString());
+                EditorGUILayout.LabelField("Android Bundle Version:", androidBundleVersionCode.ToString());
             }
+            EditorGUILayout.EndVertical();
+        }
+        EditorGUILayout.EndVertical();
+    }
 
-            // 3. If the active build target is iOS, also update the iOS build number if toggled
-            if (cachedBuildPlayerOptions.target == BuildTarget.iOS && incrementIOSBuildNumber)
+    private void DrawVersionIncrementToggleSection()
+    {
+        EditorGUILayout.BeginVertical(boxStyle);
+        {
+            GUILayout.Label("Version Settings", headerStyle);
+
+            // Put the toggle in a nice box
+            enableVersionIncrement = EditorGUILayout.ToggleLeft(
+                " Enable Version Increment",
+                enableVersionIncrement,
+                EditorStyles.boldLabel
+            );
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawNextVersionPreviewSection()
+    {
+        EditorGUILayout.BeginVertical(boxStyle);
+        {
+            GUILayout.Label("Next Version Preview", headerStyle);
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             {
-                IncrementIOSBuildNumber();
+                EditorGUILayout.LabelField(GetNextVersionPreview(), EditorStyles.wordWrappedLabel);
+            }
+            EditorGUILayout.EndVertical();
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawVersionIncrementOptionsSection()
+    {
+        EditorGUILayout.BeginVertical(boxStyle);
+        {
+            GUILayout.Label("Version Configuration", headerStyle);
+
+            GUI.enabled = enableVersionIncrement;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            {
+                GUILayout.Label("Increment Type", subHeaderStyle);
+                versionIncrement = (VersionIncrement)EditorGUILayout.EnumPopup("Increment:", versionIncrement);
+            }
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            {
+                GUILayout.Label("Version Numbers", subHeaderStyle);
+                EditorGUILayout.BeginHorizontal();
+                {
+                    EditorGUILayout.LabelField("Major:", GUILayout.Width(60));
+                    major = EditorGUILayout.IntField(major, GUILayout.Width(50));
+                    EditorGUILayout.LabelField("Minor:", GUILayout.Width(60));
+                    minor = EditorGUILayout.IntField(minor, GUILayout.Width(50));
+                    EditorGUILayout.LabelField("Build:", GUILayout.Width(60));
+                    build = EditorGUILayout.IntField(build, GUILayout.Width(50));
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            {
+                GUILayout.Label("Development Stage", subHeaderStyle);
+                selectedDevelopmentStageIndex = EditorGUILayout.Popup("Stage:", selectedDevelopmentStageIndex, developmentStages);
+            }
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            {
+                GUILayout.Label("Custom Version (Optional)", subHeaderStyle);
+                customVersion = EditorGUILayout.TextField("Custom Version:", customVersion);
+            }
+            EditorGUILayout.EndVertical();
+
+            GUI.enabled = true;
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawPlatformSpecificSection()
+    {
+        EditorGUILayout.BeginVertical(boxStyle);
+        {
+            GUILayout.Label("Platform-Specific Settings", headerStyle);
+
+            DrawAndroidSection();
+            DrawIOSSection();
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawAndroidSection()
+    {
+        // Determine if this section should be enabled
+        bool isEnabled = enableVersionIncrement;
+
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        {
+            GUILayout.Label("Android Settings", subHeaderStyle);
+
+            GUI.enabled = isEnabled;
+
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.LabelField("Bundle Version Code:", GUILayout.Width(150));
+                androidBundleVersionCode = EditorGUILayout.IntField(androidBundleVersionCode);
+            }
+            EditorGUILayout.EndHorizontal();
+
+            incrementAndroidBundleVersion = EditorGUILayout.ToggleLeft(" Increment Android Bundle Version", incrementAndroidBundleVersion);
+
+            GUI.enabled = true;
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawIOSSection()
+    {
+        // Determine if this section should be enabled
+        bool isEnabled = enableVersionIncrement;
+
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        {
+            GUILayout.Label("iOS Settings", subHeaderStyle);
+
+            GUI.enabled = isEnabled;
+
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.LabelField("iOS Build Number:", GUILayout.Width(150));
+                iosBuildNumber = EditorGUILayout.IntField(iosBuildNumber);
+            }
+            EditorGUILayout.EndHorizontal();
+
+            incrementIOSBuildNumber = EditorGUILayout.ToggleLeft(" Increment iOS Build Number", incrementIOSBuildNumber);
+
+            GUI.enabled = true;
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawBuildButtonSection()
+    {
+        EditorGUILayout.Space(10);
+
+        // Make a nice big build button
+        GUI.backgroundColor = new Color(0.6f, 0.8f, 0.6f, 1.0f);
+        if (GUILayout.Button("Build", GUILayout.Height(40)))
+        {
+            // 1. Update the main version string for the chosen target (if enabled)
+            if (enableVersionIncrement)
+            {
+                UpdateVersion();
+
+                // 2. If the active build target is Android, also update the Android bundle version if toggled
+                if (cachedBuildPlayerOptions.target == BuildTarget.Android && incrementAndroidBundleVersion)
+                {
+                    IncrementAndroidBundleVersion();
+                }
+
+                // 3. If the active build target is iOS, also update the iOS build number if toggled
+                if (cachedBuildPlayerOptions.target == BuildTarget.iOS && incrementIOSBuildNumber)
+                {
+                    IncrementIOSBuildNumber();
+                }
+            }
+            else
+            {
+                Debug.Log("Version increment disabled. Building with current version: " + currentFullVersion);
             }
 
             // 4. Build
             BuildProject();
             Close();
         }
+        GUI.backgroundColor = Color.white;
     }
 
     /// <summary>
@@ -195,9 +359,16 @@ public class CustomBuildWindow : EditorWindow
 
     /// <summary>
     /// Builds a multi-line string showing how both iOS and Android versions would change if toggles are on.
+    /// Now also shows version for other platforms.
     /// </summary>
     private string GetNextVersionPreview()
     {
+        // If version increment is disabled, show that versions will remain the same
+        if (!enableVersionIncrement)
+        {
+            return "Version increment is disabled. Current versions will be maintained.";
+        }
+
         //
         // 1. Copy the current values so we can simulate increments
         //
@@ -250,7 +421,6 @@ public class CustomBuildWindow : EditorWindow
 
         //
         // 4. If toggles are on, simulate increments
-        //    (We always show them now, no matter the build target)
         //
         if (incrementIOSBuildNumber)
         {
@@ -262,9 +432,10 @@ public class CustomBuildWindow : EditorWindow
         }
 
         //
-        // 5. Create the "old" vs "new" version strings for iOS (no stage) and Android (with stage)
+        // 5. Create the "old" vs "new" version strings for iOS, Android, and other platforms
         //
         string oldStage = developmentStages[selectedDevelopmentStageIndex].ToLower().Replace(" ", "-");
+        string newStage = developmentStages[selectedDevelopmentStageIndex].ToLower().Replace(" ", "-");
 
         // Old iOS version is always stage-less
         string oldIOSVersion = $"{oldMajor}.{oldMinor}.{oldBuild}";
@@ -276,29 +447,43 @@ public class CustomBuildWindow : EditorWindow
         string oldAndroidVersion = $"{oldStage}-{oldMajor}.{oldMinor}.{oldBuild}";
 
         // New Android version includes stage
-        string newStage = developmentStages[selectedDevelopmentStageIndex].ToLower().Replace(" ", "-");
         string newAndroidVersion = $"{newStage}-{previewMajor}.{previewMinor}.{previewBuild}";
+
+        // Other platforms (like Windows, WebGL, etc.)
+        string oldOtherVersion = $"{oldStage}-{oldMajor}.{oldMinor}.{oldBuild}";
+        string newOtherVersion = $"{newStage}-{previewMajor}.{previewMinor}.{previewBuild}";
 
         //
         // 6. Build the multi-line preview
         //
+        StringBuilder preview = new StringBuilder();
+
+        // Get current build target to highlight active platform
+        BuildTarget currentTarget = cachedBuildPlayerOptions.target;
+
         // iOS Preview
-        string iOSPreview =
-            $"iOS Version: {oldIOSVersion} -> {newIOSVersion}\n" +
-            $"iOS Build: {oldIOSBuildNumber} -> {previewIOSBuildNumber}";
+        preview.AppendLine("--- iOS ---");
+        if (currentTarget == BuildTarget.iOS)
+            preview.AppendLine("(ACTIVE BUILD TARGET)");
+        preview.AppendLine($"Version: {oldIOSVersion} → {newIOSVersion}");
+        preview.AppendLine($"Build Number: {oldIOSBuildNumber} → {previewIOSBuildNumber}");
+        preview.AppendLine();
 
         // Android Preview
-        string androidPreview =
-            $"Android Version: {oldAndroidVersion} -> {newAndroidVersion}\n" +
-            $"Android Bundle Version: {oldAndroidBundleVersion} -> {previewAndroidBundleVersion}";
+        preview.AppendLine("--- Android ---");
+        if (currentTarget == BuildTarget.Android)
+            preview.AppendLine("(ACTIVE BUILD TARGET)");
+        preview.AppendLine($"Version: {oldAndroidVersion} → {newAndroidVersion}");
+        preview.AppendLine($"Bundle Version Code: {oldAndroidBundleVersion} → {previewAndroidBundleVersion}");
+        preview.AppendLine();
 
-        // Combine them
-        // For clarity, we can separate them with some dashes or blank lines
-        string previewText =
-            $"--- iOS ---\n{iOSPreview}\n\n" +
-            $"--- Android ---\n{androidPreview}";
+        // Other Platforms Preview (Windows, MacOS, WebGL, etc.)
+        preview.AppendLine("--- Other Platforms ---");
+        if (currentTarget != BuildTarget.iOS && currentTarget != BuildTarget.Android)
+            preview.AppendLine("(ACTIVE BUILD TARGET)");
+        preview.AppendLine($"Version: {oldOtherVersion} → {newOtherVersion}");
 
-        return previewText;
+        return preview.ToString();
     }
 
     /// <summary>
