@@ -1,8 +1,8 @@
 #if UNITY_EDITOR
 using HarmonyLib;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using System.Reflection;
 
 [InitializeOnLoad]
 public static class GameViewToolbarHiderAlternative

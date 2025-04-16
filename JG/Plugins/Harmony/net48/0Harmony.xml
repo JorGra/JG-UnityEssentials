@@ -2199,7 +2199,7 @@
             <param name="fieldInfo">The field</param>
             <returns>A readable/assignable <see cref="T:HarmonyLib.AccessTools.FieldRef`1" /> delegate</returns>
         </member>
-        <member name="M:HarmonyLib.AccessTools.MethodDelegate``1(System.Reflection.MethodInfo,System.Object,System.Boolean)">
+        <member name="M:HarmonyLib.AccessTools.MethodDelegate``1(System.Reflection.MethodInfo,System.Object,System.Boolean,System.Type[])">
             <summary>Creates a delegate to a given method</summary>
             <typeparam name="DelegateType">The delegate Type</typeparam>
             <param name="method">The method to create a delegate from.</param>
@@ -2214,16 +2214,23 @@
              else, invocation of the delegate calls the exact specified <paramref name="method" /> (this is useful for calling base class methods)
              Note: if <c>false</c> and <paramref name="method" /> is an interface method, an ArgumentException is thrown.
              </param>
-            <returns>A delegate of given <typeparamref name="DelegateType" /> to given <paramref name="method" /></returns>
+            <param name="delegateArgs">
+             Only applies for instance methods, and if argument <paramref name="instance" /> is null.
+             This argument only matters if the target <paramref name="method" /> signature contains a value type (such as struct or primitive types),
+             and your <typeparamref name="DelegateType" /> argument is replaced by a non-value type
+             (usually <c>object</c>) instead of using said value type.
+             Use this if the generic arguments of <typeparamref name="DelegateType" /> doesn't represent the delegate's
+             arguments, and calling this function fails
+             <returns>A delegate of given <typeparamref name="DelegateType" /> to given <paramref name="method" /></returns></param>
             <remarks>
-                <para>
+                <param>
              Delegate invocation is more performant and more convenient to use than <see cref="M:System.Reflection.MethodBase.Invoke(System.Object,System.Object[])" />
              at a one-time setup cost.
-             </para>
-                <para>
+             </param>
+                <param>
              Works for both type of static and instance methods, both open and closed (a.k.a. unbound and bound) instance methods,
              and both class and struct methods.
-             </para>
+             </param>
             </remarks>
         </member>
         <member name="M:HarmonyLib.AccessTools.MethodDelegate``1(System.String,System.Object,System.Boolean)">
@@ -2264,7 +2271,7 @@
             <returns>A delegate of given <typeparamref name="DelegateType" /> to the method specified via [<see cref="T:HarmonyLib.HarmonyDelegate" />]
              attributes on <typeparamref name="DelegateType" /></returns>
             <remarks>
-             This calls <see cref="M:HarmonyLib.AccessTools.MethodDelegate``1(System.Reflection.MethodInfo,System.Object,System.Boolean)" /> with the <c>method</c> and <c>virtualCall</c> arguments
+             This calls <see cref="M:HarmonyLib.AccessTools.MethodDelegate``1(System.Reflection.MethodInfo,System.Object,System.Boolean,System.Type[])" /> with the <c>method</c> and <c>virtualCall</c> arguments
              determined from the [<see cref="T:HarmonyLib.HarmonyDelegate" />] attributes on <typeparamref name="DelegateType" />,
              and the given <paramref name="instance" /> (for closed instance delegates).
              </remarks>
@@ -3160,8 +3167,18 @@
             <param name="matches">Some code matches</param>
             <returns>The same code matcher</returns>
         </member>
+        <member name="M:HarmonyLib.CodeMatcher.PrepareMatchStartForward(HarmonyLib.CodeMatch[])">
+            <summary>Prepares matching forward and advancing position to beginning of matching sequence</summary>
+            <param name="matches">Some code matches</param>
+            <returns>The same code matcher</returns>
+        </member>
         <member name="M:HarmonyLib.CodeMatcher.MatchEndForward(HarmonyLib.CodeMatch[])">
             <summary>Matches forward and advances position to ending of matching sequence</summary>
+            <param name="matches">Some code matches</param>
+            <returns>The same code matcher</returns>
+        </member>
+        <member name="M:HarmonyLib.CodeMatcher.PrepareMatchEndForward(HarmonyLib.CodeMatch[])">
+            <summary>Prepares matching forward and advancing position to ending of matching sequence</summary>
             <param name="matches">Some code matches</param>
             <returns>The same code matcher</returns>
         </member>
@@ -3170,8 +3187,18 @@
             <param name="matches">Some code matches</param>
             <returns>The same code matcher</returns>
         </member>
+        <member name="M:HarmonyLib.CodeMatcher.PrepareMatchStartBackwards(HarmonyLib.CodeMatch[])">
+            <summary>Prepares matching backwards and reversing position to beginning of matching sequence</summary>
+            <param name="matches">Some code matches</param>
+            <returns>The same code matcher</returns>
+        </member>
         <member name="M:HarmonyLib.CodeMatcher.MatchEndBackwards(HarmonyLib.CodeMatch[])">
             <summary>Matches backwards and reverses position to ending of matching sequence</summary>
+            <param name="matches">Some code matches</param>
+            <returns>The same code matcher</returns>
+        </member>
+        <member name="M:HarmonyLib.CodeMatcher.PrepareMatchEndBackwards(HarmonyLib.CodeMatch[])">
+            <summary>Prepares matching backwards and reversing position to ending of matching sequence</summary>
             <param name="matches">Some code matches</param>
             <returns>The same code matcher</returns>
         </member>
@@ -3641,6 +3668,18 @@
         <member name="M:HarmonyLib.Traverse.GetValueType">
             <summary>Gets the type of the current field or property</summary>
             <returns>The type</returns>
+        </member>
+        <member name="P:HarmonyLib.Traverse.IsField">
+            <summary>Checks if the current traverse instance is for a field</summary>
+            <returns>True if its a field</returns>
+        </member>
+        <member name="P:HarmonyLib.Traverse.IsProperty">
+            <summary>Checks if the current traverse instance is for a property</summary>
+            <returns>True if its a property</returns>
+        </member>
+        <member name="P:HarmonyLib.Traverse.IsWriteable">
+            <summary>Checks if the current field or property is writeable</summary>
+            <returns>True if writing is possible</returns>
         </member>
         <member name="M:HarmonyLib.Traverse.Type(System.String)">
             <summary>Moves the current traverse instance to a inner type</summary>
