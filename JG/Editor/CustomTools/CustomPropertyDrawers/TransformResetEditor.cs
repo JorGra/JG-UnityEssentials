@@ -208,12 +208,12 @@ public class TransformResetEditor : Editor
                 Undo.RecordObject(t, "Paste Scale");
                 t.localScale = scaleClipboard;
             }
+            EditorGUI.EndDisabledGroup();
 
             // Uniform scale toggle
             GUIContent lockIcon = EditorGUIUtility.IconContent("LockIcon");
             lockIcon.tooltip = "Toggle uniform scaling";
             uniformScale = GUILayout.Toggle(uniformScale, lockIcon, smallToggleStyle);
-            EditorGUI.EndDisabledGroup();
         }
         EditorGUILayout.EndHorizontal();
     }
