@@ -1,6 +1,10 @@
 using UnityEditor;
 using UnityEngine;
 
+/// <summary>
+/// Custom Editor for Transform with reset, copy, paste, uniform scale,
+/// and Copy All (CA) / Paste All (PA) buttons integrated into Position and Rotation rows.
+/// </summary>
 [CustomEditor(typeof(Transform))]
 public class TransformResetEditor : Editor
 {
@@ -14,10 +18,10 @@ public class TransformResetEditor : Editor
     private static Vector3 scaleClipboard;
     private static bool scaleClipboardValid;
 
-    // Toggle to keep scale uniform
+    // Toggle to keep scale proportional
     private static bool uniformScale;
 
-    // A reusable style for small toggle/buttons (fixed width/height)
+    // A reusable style for small toggle/buttons
     private static GUIStyle smallToggleStyle;
     private static GUIStyle smallButtonStyle;
 
@@ -29,7 +33,8 @@ public class TransformResetEditor : Editor
             {
                 fixedWidth = 20,
                 fixedHeight = 20,
-                padding = new RectOffset(0, 0, 0, 0)
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0)
             };
         }
 
@@ -39,17 +44,19 @@ public class TransformResetEditor : Editor
             {
                 fixedWidth = 20,
                 fixedHeight = 20,
-                padding = new RectOffset(0, 0, 0, 0)
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
             };
         }
     }
 
+    /// <inheritdoc/>
     public override void OnInspectorGUI()
     {
-        // Make sure our styles are initialized
         EnsureStyles();
 
         Transform t = (Transform)target;
+        Vector3 oldScale = t.localScale;
 
         // --- POSITION ---
         EditorGUILayout.BeginHorizontal();
@@ -69,14 +76,14 @@ public class TransformResetEditor : Editor
                 t.localPosition = Vector3.zero;
             }
 
-            // Copy (C)
+            // Copy position (C)
             if (GUILayout.Button("C", smallButtonStyle))
             {
                 positionClipboard = t.localPosition;
                 positionClipboardValid = true;
             }
 
-            // Paste (P)
+            // Paste position (P)
             EditorGUI.BeginDisabledGroup(!positionClipboardValid);
             if (GUILayout.Button("P", smallButtonStyle))
             {
@@ -84,6 +91,16 @@ public class TransformResetEditor : Editor
                 t.localPosition = positionClipboard;
             }
             EditorGUI.EndDisabledGroup();
+
+            // Copy All (CA)
+            if (GUILayout.Button(new GUIContent("CA", "Copy All Transforms"), smallButtonStyle))
+            {
+                // copy pos, rot, scale
+                positionClipboard = t.localPosition;
+                rotationClipboard = t.localEulerAngles;
+                scaleClipboard = t.localScale;
+                positionClipboardValid = rotationClipboardValid = scaleClipboardValid = true;
+            }
         }
         EditorGUILayout.EndHorizontal();
 
@@ -105,19 +122,31 @@ public class TransformResetEditor : Editor
                 t.localEulerAngles = Vector3.zero;
             }
 
-            // Copy (C)
+            // Copy rotation (C)
             if (GUILayout.Button("C", smallButtonStyle))
             {
                 rotationClipboard = t.localEulerAngles;
                 rotationClipboardValid = true;
             }
 
-            // Paste (P)
+            // Paste rotation (P)
             EditorGUI.BeginDisabledGroup(!rotationClipboardValid);
             if (GUILayout.Button("P", smallButtonStyle))
             {
                 Undo.RecordObject(t, "Paste Rotation");
                 t.localEulerAngles = rotationClipboard;
+            }
+            EditorGUI.EndDisabledGroup();
+
+            // Paste All (PA)
+            bool allValid = positionClipboardValid && rotationClipboardValid && scaleClipboardValid;
+            EditorGUI.BeginDisabledGroup(!allValid);
+            if (GUILayout.Button(new GUIContent("PA", "Paste All Transforms"), smallButtonStyle))
+            {
+                Undo.RecordObject(t, "Paste All Transforms");
+                t.localPosition = positionClipboard;
+                t.localEulerAngles = rotationClipboard;
+                t.localScale = scaleClipboard;
             }
             EditorGUI.EndDisabledGroup();
         }
@@ -126,48 +155,37 @@ public class TransformResetEditor : Editor
         // --- SCALE ---
         EditorGUILayout.BeginHorizontal();
         {
-            // Scale field first
-            Vector3 oldScale = t.localScale;
             EditorGUI.BeginChangeCheck();
             Vector3 newScale = EditorGUILayout.Vector3Field("Scale", oldScale);
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(t, "Transform Scale");
 
-                // If uniform scaling is enabled, make all axes match the one that changed most
                 if (uniformScale)
                 {
-                    float dx = Mathf.Abs(newScale.x - oldScale.x);
-                    float dy = Mathf.Abs(newScale.y - oldScale.y);
-                    float dz = Mathf.Abs(newScale.z - oldScale.z);
-
-                    if (dx >= dy && dx >= dz)
+                    // proportional scaling: apply ratio of change on primary axis
+                    Vector3 delta = newScale - oldScale;
+                    // detect primary axis change
+                    if (Mathf.Abs(delta.x) >= Mathf.Abs(delta.y) && Mathf.Abs(delta.x) >= Mathf.Abs(delta.z) && oldScale.x != 0f)
                     {
-                        // x changed "the most"
-                        newScale.y = newScale.x;
-                        newScale.z = newScale.x;
+                        float ratio = newScale.x / oldScale.x;
+                        newScale = oldScale * ratio;
                     }
-                    else if (dy >= dx && dy >= dz)
+                    else if (Mathf.Abs(delta.y) >= Mathf.Abs(delta.x) && Mathf.Abs(delta.y) >= Mathf.Abs(delta.z) && oldScale.y != 0f)
                     {
-                        // y changed "the most"
-                        newScale.x = newScale.y;
-                        newScale.z = newScale.y;
+                        float ratio = newScale.y / oldScale.y;
+                        newScale = oldScale * ratio;
                     }
-                    else
+                    else if (oldScale.z != 0f)
                     {
-                        // z changed "the most"
-                        newScale.x = newScale.z;
-                        newScale.y = newScale.z;
+                        float ratio = newScale.z / oldScale.z;
+                        newScale = oldScale * ratio;
                     }
                 }
 
                 t.localScale = newScale;
             }
 
-            // Lock toggle (uniform scale) right before Reset
-            GUIContent lockIcon = EditorGUIUtility.IconContent("LockIcon");
-            lockIcon.tooltip = "Toggle uniform scaling";
-            uniformScale = GUILayout.Toggle(uniformScale, lockIcon, smallToggleStyle);
 
             // Reset (R)
             if (GUILayout.Button("R", smallButtonStyle))
@@ -176,20 +194,25 @@ public class TransformResetEditor : Editor
                 t.localScale = Vector3.one;
             }
 
-            // Copy (C)
+            // Copy scale (C)
             if (GUILayout.Button("C", smallButtonStyle))
             {
                 scaleClipboard = t.localScale;
                 scaleClipboardValid = true;
             }
 
-            // Paste (P)
+            // Paste scale (P)
             EditorGUI.BeginDisabledGroup(!scaleClipboardValid);
             if (GUILayout.Button("P", smallButtonStyle))
             {
                 Undo.RecordObject(t, "Paste Scale");
                 t.localScale = scaleClipboard;
             }
+
+            // Uniform scale toggle
+            GUIContent lockIcon = EditorGUIUtility.IconContent("LockIcon");
+            lockIcon.tooltip = "Toggle uniform scaling";
+            uniformScale = GUILayout.Toggle(uniformScale, lockIcon, smallToggleStyle);
             EditorGUI.EndDisabledGroup();
         }
         EditorGUILayout.EndHorizontal();
