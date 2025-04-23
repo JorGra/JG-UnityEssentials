@@ -21,6 +21,7 @@ public class HierarchyFolder : MonoBehaviour
     [SerializeField]
     private Color folderColor = new Color(0.1132075f, 0.1132075f, 0.1132075f, 0.7450981f);
 
+    public bool UseGradient = true;
     /// <summary>
     /// Should an underline be drawn below the folder name?
     /// </summary>

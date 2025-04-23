@@ -38,7 +38,7 @@ public static class HierarchyFolderEditor
         var evt = Event.current;
         Vector2 mousePos = evt.mousePosition;
 
-        // 2) Only consider hover during Repaint (or Layout, if you prefer)
+        // 2) Only consider hover during Repaint
         bool isHover = evt.type == EventType.Repaint && rowRect.Contains(mousePos);
 
         // base background
@@ -49,12 +49,21 @@ public static class HierarchyFolderEditor
         else
             EditorGUI.DrawRect(rowRect, new Color(0.27f, 0.27f, 0.27f, 1f));
 
+        // 2) gradient overlay
         if (!isHover && !Selection.Contains(go))
         {
+            if (comp.UseGradient)
+            {
 
-            // 2) Your gradient overlay
-            var gradientTex = GenerateGradientTexture(comp.FolderColor);
-            GUI.DrawTexture(gradRect, gradientTex, ScaleMode.StretchToFill);
+                var gradientTex = GenerateGradientTexture(comp.FolderColor);
+                GUI.DrawTexture(gradRect, gradientTex, ScaleMode.StretchToFill);
+            }
+            else
+            {
+
+                var gradientTex = GenerateFullColorTexture(comp.FolderColor);
+                GUI.DrawTexture(gradRect, gradientTex, ScaleMode.StretchToFill);
+            }
         }
 
         // 3) Centered label + underline
@@ -80,6 +89,16 @@ public static class HierarchyFolderEditor
         var tex = new Texture2D(2, 1, TextureFormat.ARGB32, false);
         tex.hideFlags = HideFlags.HideAndDontSave;
         tex.SetPixel(0, 0, new Color(color.r, color.g, color.b, 0f));
+        tex.SetPixel(1, 0, color);
+        tex.Apply();
+        return tex;
+    }
+
+    private static Texture2D GenerateFullColorTexture(Color color)
+    {
+        var tex = new Texture2D(2, 1, TextureFormat.ARGB32, false);
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        tex.SetPixel(0, 0, color);
         tex.SetPixel(1, 0, color);
         tex.Apply();
         return tex;
