@@ -1,4 +1,4 @@
-// HierarchyFolderComponent.cs (Place in runtime code folder, e.g. Assets/Scripts)
+// HierarchyFolder.cs (Place in runtime code folder, e.g. Assets/Scripts)
 using UnityEngine;
 
 /// <summary>
@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 [ExecuteInEditMode]
 [DisallowMultipleComponent]
-public class HierarchyFolderComponent : MonoBehaviour
+public class HierarchyFolder : MonoBehaviour
 {
     /// <summary>
     /// Display name for the folder in the Hierarchy.
@@ -19,13 +19,13 @@ public class HierarchyFolderComponent : MonoBehaviour
     /// Background gradient color (alpha at the right edge).
     /// </summary>
     [SerializeField]
-    private Color folderColor = new Color(0.45f, 0.66f, 0.91f, 0.7f);
+    private Color folderColor = new Color(0.1132075f, 0.1132075f, 0.1132075f, 0.7450981f);
 
     /// <summary>
     /// Should an underline be drawn below the folder name?
     /// </summary>
     [SerializeField]
-    private bool underline = true;
+    private bool underline = false;
 
     /// <summary>
     /// Expose folder properties to the Editor.
