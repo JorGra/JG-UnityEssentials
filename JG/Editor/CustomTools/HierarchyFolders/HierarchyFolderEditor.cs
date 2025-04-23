@@ -43,11 +43,11 @@ public static class HierarchyFolderEditor
 
         // base background
         if (!Selection.Contains(go) && !isHover)
-            EditorGUI.DrawRect(rowRect, new Color(0.22f, 0.22f, 0.22f, 1f));
+            EditorGUI.DrawRect(boxRect, new Color(0.22f, 0.22f, 0.22f, 1f));
         else if (Selection.Contains(go))
-            EditorGUI.DrawRect(rowRect, new Color(0.17f, 0.36f, 0.53f, 1f));
+            EditorGUI.DrawRect(boxRect, new Color(0.17f, 0.36f, 0.53f, 1f));
         else
-            EditorGUI.DrawRect(rowRect, new Color(0.27f, 0.27f, 0.27f, 1f));
+            EditorGUI.DrawRect(boxRect, new Color(0.27f, 0.27f, 0.27f, 1f));
 
         // 2) gradient overlay
         if (!isHover && !Selection.Contains(go))
