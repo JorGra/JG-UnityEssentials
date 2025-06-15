@@ -1,6 +1,6 @@
+using SelectionHistorySystem;
 using UnityEditor;
 using UnityEngine;
-using SelectionHistorySystem;
 
 [InitializeOnLoad]
 public static class SelectionHistory
@@ -50,6 +50,19 @@ public static class SelectionHistory
                 SelectionHistoryWindow.RepaintIfOpen();
             }
         }
+    }
+
+    [MenuItem("Tools/Selection History/Back _&LEFT", false, 3502)]
+    private static void BackHotkey()
+    {
+        GoBackwardInHistory();                 // same call the mouse uses
+    }
+
+    // Alt ( & )  +  RIGHT arrow
+    [MenuItem("Tools/Selection History/Forward _&RIGHT", false, 3503)]
+    private static void ForwardHotkey()
+    {
+        GoForwardInHistory();
     }
 
     #region Public API
