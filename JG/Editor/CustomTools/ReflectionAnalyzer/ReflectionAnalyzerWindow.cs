@@ -1,8 +1,8 @@
-using UnityEngine;
-using UnityEditor;
 using System;
-using System.Reflection;
 using System.Linq;
+using System.Reflection;
+using UnityEditor;
+using UnityEngine;
 
 public class ReflectionAnalyzerWindow : EditorWindow
 {
@@ -13,7 +13,7 @@ public class ReflectionAnalyzerWindow : EditorWindow
     private Vector2 methodScrollPos;
     private Vector2 propertyScrollPos;
 
-    [MenuItem("Tools/Reflection Analyzer")]
+    [MenuItem("Tools/Reflection Analyzer", false, 2505)]
     public static void ShowWindow()
     {
         GetWindow<ReflectionAnalyzerWindow>("Reflection Analyzer");

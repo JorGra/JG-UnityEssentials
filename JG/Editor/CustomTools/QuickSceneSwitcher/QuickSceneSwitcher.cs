@@ -21,7 +21,7 @@ public class QuickSceneSwitcher : EditorWindow
     /// <summary>
     /// Opens the Scene Switcher window.
     /// </summary>
-    [MenuItem("Tools/Open Scene Switcher")]
+    [MenuItem("Tools/Quick Scene Switcher", false, 2500)]
     public static void ShowWindow()
     {
         GetWindow<QuickSceneSwitcher>("Scene Switcher");

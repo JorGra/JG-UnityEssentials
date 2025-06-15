@@ -6,9 +6,9 @@ public class MainPackageInstallerWindow : EditorWindow
 {
     private List<IModule> modules = new List<IModule>();
     private int currentModuleIndex = 0;
-    private readonly string[] moduleNames = { "Folder Setup", "Project Setup Tool"  };
+    private readonly string[] moduleNames = { "Folder Setup", "Project Setup Tool" };
 
-    [MenuItem("Tools/Project Setup Tool")]
+    [MenuItem("Tools/Project Setup Tool", false, 2507)]
     public static void ShowWindow()
     {
         GetWindow<MainPackageInstallerWindow>("Project Setup Tool");
@@ -38,7 +38,7 @@ public class MainPackageInstallerWindow : EditorWindow
 
     private void OnGUI()
     {
-        if(modules.Count == 0)
+        if (modules.Count == 0)
             return;
 
         currentModuleIndex = GUILayout.Toolbar(currentModuleIndex, moduleNames);

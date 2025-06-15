@@ -1,5 +1,5 @@
-﻿using UnityEngine;
-using UnityEditor;
+﻿using UnityEditor;
+using UnityEngine;
 
 public class SelectionHistoryWindow : EditorWindow
 {
@@ -13,7 +13,7 @@ public class SelectionHistoryWindow : EditorWindow
     private bool _isResizing;
     private const string EditorPrefKey_Splitter = "SelectionHistoryWindow_SplitterPercent";
 
-    [MenuItem("Tools/Selection History")]
+    [MenuItem("Tools/Selection History", false, 2500)]
     public static void ShowWindow()
     {
         GetWindow<SelectionHistoryWindow>("Selection History");

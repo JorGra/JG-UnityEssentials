@@ -1,7 +1,7 @@
-using UnityEngine;
-using UnityEditor;
 using System;
 using System.IO;
+using UnityEditor;
+using UnityEngine;
 
 namespace JG.Tools.Editor
 {
@@ -21,13 +21,13 @@ namespace JG.Tools.Editor
         private bool showFileSettings = true;
         private bool showCaptureSettings = true;
 
-        [MenuItem("Tools/Screenshot Tool")]
+        [MenuItem("Tools/Screenshot Tool", false, 2501)]
         public static void ShowWindow()
         {
             GetWindow<HighResScreenshotTool>("Screenshot Tool");
         }
 
-        [MenuItem("Tools/Take Screenshot %&s")] // % (ctrl/cmd), & (alt), s
+        [MenuItem("Tools/Take Screenshot %&s", false, 3500)] // % (ctrl/cmd), & (alt), s
         private static void CaptureScreenshotShortcut()
         {
             var window = GetWindow<HighResScreenshotTool>();
