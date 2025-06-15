@@ -33,6 +33,9 @@ public class HoverTexturePreviewDrawer : PropertyDrawer
 
         // Convert to screen space to test against the Inspector window bounds
         Vector2 screenPos = GUIUtility.GUIToScreenPoint(previewRect.position);
+        if (EditorWindow.focusedWindow == null)
+            return; // no focused window, can't determine position
+
         Rect inspectorScreenRect = EditorWindow.focusedWindow.position;
 
         // If the rect would stick out of the top of the visible Inspector, flip
