@@ -60,13 +60,13 @@ public static class EventBusUtil
         List<Type> eventBusTypes = new List<Type>();
 
         var typedef = typeof(EventBus<>);
+        string eventTypesString = string.Join("\n", EventTypes);
         foreach (var eventType in EventTypes)
         {
             var busType = typedef.MakeGenericType(eventType);
             eventBusTypes.Add(busType);
-            Debug.Log($"Initialized EventBus<{eventType.Name}>");
         }
-
+        Debug.Log($"Total EventBus types initialized: {eventBusTypes.Count} \n\n" + eventTypesString);
         return eventBusTypes;
     }
 
