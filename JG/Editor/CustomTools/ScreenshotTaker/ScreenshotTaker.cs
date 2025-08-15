@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -15,7 +16,10 @@ namespace JG.Tools.Editor
         private bool openFolderAfterCapture = true;
         private bool isCapturingScreenshot = false;
         private bool saveInAssetsFolder = true;
-        private bool includeUI = true; // Option to include UI or not
+        private bool includeUI = true;
+
+        // NEW: transparent output option
+        private bool transparentBackground = false;
 
         // Foldout state for sections
         private bool showFileSettings = true;
@@ -44,22 +48,18 @@ namespace JG.Tools.Editor
             customPath = EditorPrefs.GetString("HighResScreenshotTool_CustomPath", customPath);
             openFolderAfterCapture = EditorPrefs.GetBool("HighResScreenshotTool_OpenFolder", openFolderAfterCapture);
             saveInAssetsFolder = EditorPrefs.GetBool("HighResScreenshotTool_SaveInAssets", saveInAssetsFolder);
-            includeUI = EditorPrefs.GetBool("HighResScreenshotTool_IncludeUI", includeUI); // Include UI preference
+            includeUI = EditorPrefs.GetBool("HighResScreenshotTool_IncludeUI", includeUI);
+            transparentBackground = EditorPrefs.GetBool("HighResScreenshotTool_TransparentBG", transparentBackground);
         }
 
         private void OnGUI()
         {
-            //GUILayout.Label("Screenshot Tool", EditorStyles.boldLabel);
-
-            EditorGUI.BeginChangeCheck();
-
             if (GUILayout.Button("Capture Screenshot"))
             {
                 CaptureScreenshot();
             }
 
             EditorGUILayout.Space();
-
             EditorGUILayout.HelpBox(
                 $"Shortcut: {(Application.platform == RuntimePlatform.OSXEditor ? "Cmd" : "Ctrl")} + Alt + S",
                 MessageType.Info);
@@ -72,9 +72,7 @@ namespace JG.Tools.Editor
 
                 screenshotName = EditorGUILayout.TextField("Screenshot Name", screenshotName);
 
-                // Save Path Settings
                 saveInAssetsFolder = EditorGUILayout.Toggle("Save in Assets Folder", saveInAssetsFolder);
-
                 useCustomPath = EditorGUILayout.Toggle("Use Custom Path", useCustomPath);
 
                 if (useCustomPath)
@@ -85,7 +83,6 @@ namespace JG.Tools.Editor
                     {
                         string defaultPath = saveInAssetsFolder ? Application.dataPath : customPath;
                         string title = saveInAssetsFolder ? "Choose Directory in Assets" : "Choose Directory";
-
                         string path = EditorUtility.OpenFolderPanel(title, defaultPath, "");
                         if (!string.IsNullOrEmpty(path))
                         {
@@ -132,17 +129,30 @@ namespace JG.Tools.Editor
                     new string[] { "1x", "2x", "3x" },
                     new int[] { 1, 2, 3 });
 
-                includeUI = EditorGUILayout.Toggle("Include UI in Screenshot", includeUI); // Toggle for UI inclusion
+                includeUI = EditorGUILayout.Toggle(new GUIContent("Include UI in Screenshot",
+                    "If you also enable Transparent Background, overlay canvases will be temporarily rendered via the camera for this capture."),
+                    includeUI);
+
+                transparentBackground = EditorGUILayout.Toggle(new GUIContent("Transparent Background",
+                    "Renders to a RenderTexture with alpha and clears with Color.a = 0. Skyboxes are disabled for the capture."),
+                    transparentBackground);
+
+                if (transparentBackground && includeUI)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Including UI with transparency requires canvases to render via a Camera. " +
+                        "Screen Space – Overlay canvases will be temporarily switched to Screen Space – Camera and restored after the capture.",
+                        MessageType.Info);
+                }
 
                 EditorGUI.indentLevel--;
             }
 
             EditorGUILayout.Space();
 
-            // Apply changes if any
-            if (EditorGUI.EndChangeCheck())
+            // Persist settings
+            if (GUI.changed)
             {
-                // Save preferences
                 EditorPrefs.SetString("HighResScreenshotTool_Name", screenshotName);
                 EditorPrefs.SetInt("HighResScreenshotTool_Multiplier", resolutionMultiplier);
                 EditorPrefs.SetString("HighResScreenshotTool_SavePath", defaultSavePath);
@@ -150,18 +160,16 @@ namespace JG.Tools.Editor
                 EditorPrefs.SetString("HighResScreenshotTool_CustomPath", customPath);
                 EditorPrefs.SetBool("HighResScreenshotTool_OpenFolder", openFolderAfterCapture);
                 EditorPrefs.SetBool("HighResScreenshotTool_SaveInAssets", saveInAssetsFolder);
-                EditorPrefs.SetBool("HighResScreenshotTool_IncludeUI", includeUI); // Save UI preference
+                EditorPrefs.SetBool("HighResScreenshotTool_IncludeUI", includeUI);
+                EditorPrefs.SetBool("HighResScreenshotTool_TransparentBG", transparentBackground);
             }
 
-            EditorGUILayout.Space();
-
-            // Display the full save path
+            // Display the full save path + open folder
             string fullSavePath = GetFullSavePath();
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Save Location:", EditorStyles.boldLabel);
             EditorGUILayout.SelectableLabel(fullSavePath, EditorStyles.textField, GUILayout.Height(20));
 
-            // Open Screenshot Folder Button
             if (GUILayout.Button("Open Screenshot Folder"))
             {
                 OpenScreenshotFolder();
@@ -171,30 +179,20 @@ namespace JG.Tools.Editor
         private string GetFullSavePath()
         {
             if (useCustomPath)
-            {
                 return customPath;
-            }
             else if (saveInAssetsFolder)
-            {
                 return Path.Combine(Application.dataPath, defaultSavePath);
-            }
             else
-            {
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Unity Screenshots");
-            }
         }
 
         private void OpenScreenshotFolder()
         {
             string folderPath = GetFullSavePath();
             if (Directory.Exists(folderPath))
-            {
                 EditorUtility.RevealInFinder(folderPath);
-            }
             else
-            {
                 EditorUtility.DisplayDialog("Folder not found", "The screenshot folder does not exist.", "OK");
-            }
         }
 
         private void CaptureScreenshot()
@@ -203,42 +201,42 @@ namespace JG.Tools.Editor
             isCapturingScreenshot = true;
 
             string folderPath = GetFullSavePath();
-
-            // Ensure the directory exists
             if (!Directory.Exists(folderPath))
-            {
                 Directory.CreateDirectory(folderPath);
-            }
 
-            // Generate filename with timestamp
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             string filename = $"{screenshotName}_{timestamp}.png";
             string fullPath = Path.Combine(folderPath, filename);
 
-            // If you want to include UI and capture everything on screen
-            if (includeUI)
+            // If not transparent AND we want UI, use the simple full-screen capture.
+            if (includeUI && !transparentBackground)
             {
-                // Use ScreenCapture to capture everything on the screen
                 ScreenCapture.CaptureScreenshot(fullPath, resolutionMultiplier);
                 Debug.Log($"Screenshot with UI saved: {fullPath}");
-            }
-            else
-            {
-                // If you don't want to include UI, use manual rendering (could also use RenderTexture)
-                CaptureWithoutUI(fullPath);
+                if (openFolderAfterCapture) EditorUtility.RevealInFinder(fullPath);
+                isCapturingScreenshot = false;
+                return;
             }
 
+            // Otherwise render manually (supports transparency and/or no-UI)
+            CaptureToRenderTexture(fullPath, includeUI, transparentBackground);
+
             if (openFolderAfterCapture)
-            {
                 EditorUtility.RevealInFinder(fullPath);
-            }
 
             isCapturingScreenshot = false;
         }
 
-        private void CaptureWithoutUI(string fullPath)
+        private struct CanvasState
         {
-            // Manual camera rendering code for game view only without UI
+            public Canvas canvas;
+            public RenderMode renderMode;
+            public Camera worldCamera;
+            public float planeDistance;
+        }
+
+        private void CaptureToRenderTexture(string fullPath, bool includeUIInRT, bool transparentBG)
+        {
             Camera camera = Camera.main;
             if (camera == null)
             {
@@ -246,35 +244,112 @@ namespace JG.Tools.Editor
                 return;
             }
 
-            // Get the current game view resolution
-            int width = (int)Handles.GetMainGameViewSize().x;
-            int height = (int)Handles.GetMainGameViewSize().y;
+            // Determine target size from current Game View
+            Vector2 gv = Handles.GetMainGameViewSize();
+            int width = Mathf.Max(1, (int)gv.x) * resolutionMultiplier;
+            int height = Mathf.Max(1, (int)gv.y) * resolutionMultiplier;
 
-            // Create a render texture with the multiplied resolution
-            RenderTexture rt = new RenderTexture(width * resolutionMultiplier, height * resolutionMultiplier, 24);
-            RenderTexture prev = camera.targetTexture;
-            RenderTexture.active = rt;
+            // Setup RT with alpha
+            var rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+            {
+                antiAliasing = Mathf.Max(1, QualitySettings.antiAliasing)
+            };
+
+            // Save camera state
+            var prevTarget = camera.targetTexture;
+            var prevFlags = camera.clearFlags;
+            var prevBG = camera.backgroundColor;
+
+            // For transparency we need SolidColor clear with alpha 0 and NO skybox
+            if (transparentBG)
+            {
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                Color c = prevBG; c.a = 0f;
+                camera.backgroundColor = c;
+            }
+
+            // Optionally coerce Overlay canvases to render via this camera (so they end up in the RT)
+            List<CanvasState> changedCanvases = new List<CanvasState>();
+            if (includeUIInRT)
+            {
+                Canvas[] canvases = Resources.FindObjectsOfTypeAll<Canvas>();
+                foreach (var cv in canvases)
+                {
+                    if (!cv.isRootCanvas) continue;
+
+                    // Save state
+                    changedCanvases.Add(new CanvasState
+                    {
+                        canvas = cv,
+                        renderMode = cv.renderMode,
+                        worldCamera = cv.worldCamera,
+                        planeDistance = cv.planeDistance
+                    });
+
+                    if (cv.renderMode == RenderMode.ScreenSpaceOverlay)
+                    {
+                        cv.renderMode = RenderMode.ScreenSpaceCamera;
+                        cv.worldCamera = camera;
+                        // Keep it just in front of the camera
+                        cv.planeDistance = 1f;
+                    }
+                    else if (cv.renderMode == RenderMode.ScreenSpaceCamera && cv.worldCamera == null)
+                    {
+                        // Make sure it renders through our camera
+                        cv.worldCamera = camera;
+                    }
+                }
+
+                Canvas.ForceUpdateCanvases();
+            }
+
+            // Render
+            RenderTexture prevActive = RenderTexture.active;
             camera.targetTexture = rt;
+            RenderTexture.active = rt;
 
-            // Render the camera to the render texture
+            // If transparency AND we kept Skybox clear flags, clear manually anyway (safety)
+            if (transparentBG)
+            {
+                GL.Clear(true, true, new Color(0, 0, 0, 0));
+            }
+
             camera.Render();
 
-            // Create a texture2D and read the render texture
-            Texture2D screenshot = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
-            screenshot.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-            screenshot.Apply();
+            // Readback (RGBA if transparent, else RGB)
+            Texture2D tex = new Texture2D(rt.width, rt.height, transparentBG ? TextureFormat.RGBA32 : TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            tex.Apply();
 
-            // Clean up
-            camera.targetTexture = prev;
-            RenderTexture.active = null;
+            // Restore canvases
+            if (includeUIInRT)
+            {
+                foreach (var s in changedCanvases)
+                {
+                    if (s.canvas == null) continue;
+                    s.canvas.renderMode = s.renderMode;
+                    s.canvas.worldCamera = s.worldCamera;
+                    s.canvas.planeDistance = s.planeDistance;
+                }
+                Canvas.ForceUpdateCanvases();
+            }
+
+            // Restore camera/RT
+            camera.targetTexture = prevTarget;
+            camera.clearFlags = prevFlags;
+            camera.backgroundColor = prevBG;
+            RenderTexture.active = prevActive;
+
+            // Save PNG
+            byte[] bytes = tex.EncodeToPNG();
+            File.WriteAllBytes(fullPath, bytes);
+
+            // Cleanup
+            DestroyImmediate(tex);
+            rt.Release();
             DestroyImmediate(rt);
 
-            // Save the screenshot
-            byte[] bytes = screenshot.EncodeToPNG();
-            File.WriteAllBytes(fullPath, bytes);
-            DestroyImmediate(screenshot);
-
-            Debug.Log($"Screenshot without UI saved: {fullPath}");
+            Debug.Log($"Screenshot {(transparentBG ? "with transparent background " : "")}saved: {fullPath}");
         }
     }
 }
