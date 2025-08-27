@@ -15,15 +15,17 @@ namespace ProjectFolderColors
     [Serializable]
     public class FolderColorRule
     {
-        // NOTE: store only serializable, path-based data (Unity 6.1 safe)
+        // Store only serializable, path-based data
         public string folderPath = "Assets";        // Normalized "Assets/..." path
         public Color baseColor = new Color(0.20f, 0.60f, 1f, 0.45f);
     }
 
-    // Stored under ProjectSettings (kept out of Assets/)
-    [FilePath("ProjectSettings/FolderColorsSettings.asset", FilePathAttribute.Location.ProjectFolder)]
-    public class FolderColorsSettings : ScriptableSingleton<FolderColorsSettings>
+    // -------------------------------------------------------------------------
+    // SETTINGS (custom JSON persistence under ProjectSettings/)
+    // -------------------------------------------------------------------------
+    public sealed class FolderColorsSettings : ScriptableObject
     {
+        // ---- persisted data ----
         public bool enabled = true;
         public bool drawOnSelected = false;
 
@@ -38,25 +40,74 @@ namespace ProjectFolderColors
 
         public List<FolderColorRule> rules = new List<FolderColorRule>();
 
-        public static string FilePath => GetFilePath();
-
-        void OnEnable()
+        // ---- singleton facade (keeps the old API) ----
+        static FolderColorsSettings _instance;
+        public static FolderColorsSettings instance
         {
-            // Let ScriptableSingleton keep its default HideAndDontSave behavior.
-            // (You can still clear NotEditable in the SettingsProvider if you want UI editing.)
-            if (rules == null) rules = new List<FolderColorRule>();
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = CreateInstance<FolderColorsSettings>();
+                    LoadFromDisk(_instance); // fill from JSON if present
+                }
+                return _instance;
+            }
         }
 
+        // Force-load early so other static ctors can read settings safely
+        [InitializeOnLoadMethod]
+        static void EnsureLoadedEarly() => _ = instance;
+
+        // ---- persistence paths ----
+        const string k_RelativePath = "ProjectSettings/FolderColorsSettings.json";
+        public static string FilePath => k_RelativePath; // project-relative (for logs/printing)
+        public static string AbsoluteFilePath
+        {
+            get
+            {
+                var projectRoot = Path.GetDirectoryName(Application.dataPath);
+                return Path.Combine(projectRoot, k_RelativePath);
+            }
+        }
+
+        // ---- save/load ----
         public void SaveSettings()
         {
-            // Ensure the target directory exists, then let ScriptableSingleton write the file.
-            var path = GetFilePath();
-            var dir = System.IO.Path.GetDirectoryName(path);
-            if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+            var path = AbsoluteFilePath;
+            var dir = Path.GetDirectoryName(path);
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-            Save(true); // text JSON in ProjectSettings
+            // Use EditorJsonUtility so Unity types (Color, etc.) serialize correctly.
+            var json = EditorJsonUtility.ToJson(this, prettyPrint: true);
+            File.WriteAllText(path, json);
+            // Not an imported asset: no AssetDatabase.SaveAssets() or SetDirty needed.
+        }
+
+        static void LoadFromDisk(FolderColorsSettings target)
+        {
+            try
+            {
+                var path = AbsoluteFilePath;
+                if (File.Exists(path))
+                {
+                    var json = File.ReadAllText(path);
+                    if (!string.IsNullOrWhiteSpace(json))
+                        EditorJsonUtility.FromJsonOverwrite(json, target);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"FolderColorsSettings: failed to load settings: {e.Message}");
+            }
+
+            if (target.rules == null) target.rules = new List<FolderColorRule>();
         }
     }
+
+    // -------------------------------------------------------------------------
+    // RENDERER / MENU HOOKS
+    // -------------------------------------------------------------------------
     [InitializeOnLoad]
     public static class FolderColorizer
     {
@@ -64,13 +115,6 @@ namespace ProjectFolderColors
             new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
 
         static string[] cachedSelectionGuids = Array.Empty<string>();
-
-        [MenuItem("Window/Folder Colors/Debug/Print Save Path")]
-        static void PrintSavePath()
-        {
-            var s = FolderColorsSettings.instance;
-            Debug.Log($"Saving to: {FolderColorsSettings.FilePath} | rules: {s.rules?.Count ?? 0} | exists: {System.IO.File.Exists(FolderColorsSettings.FilePath)}");
-        }
 
         static FolderColorizer()
         {
@@ -237,13 +281,12 @@ namespace ProjectFolderColors
             SettingsService.OpenProjectSettings("Project/Folder Colors");
         }
 
-        [MenuItem("Window/Folder Colors/Project Settings...", priority = 2010)]
+        [MenuItem("Tools/Folder Colors/Project Settings...", priority = 2010)]
         static void OpenSettings() => SettingsService.OpenProjectSettings("Project/Folder Colors");
 
-        // ---------- Edge Gradient generator (now with center offset) ----------
+        // ---------- Edge Gradient generator ----------
         static class EdgeGradient
         {
-            // cache by quantized parameters (edge width, feather, orientation, center offset)
             static readonly Dictionary<int, Texture2D> _cache = new Dictionary<int, Texture2D>();
 
             public static Texture2D Get(float edgeWidthFraction, float feather01, EdgeOrientation orientation, float centerOffset)
@@ -252,7 +295,6 @@ namespace ProjectFolderColors
                 feather01 = Mathf.Clamp01(feather01);
                 centerOffset = Mathf.Clamp(centerOffset, -0.40f, 0.40f);
 
-                // build key (10 bits each is ample after *1000 quantization)
                 int key = (Mathf.RoundToInt(edgeWidthFraction * 1000f) << 22)
                         | (Mathf.RoundToInt(feather01 * 1000f) << 12)
                         | ((int)orientation << 10)
@@ -271,17 +313,13 @@ namespace ProjectFolderColors
                 float w = Mathf.Max(1e-4f, edgeWidthFraction);
                 float gamma = Mathf.Lerp(0.6f, 3.0f, feather01);
 
-                // For BothSides, split per-side widths with a center shift.
-                // We want the transparent “plateau” midpoint at 0.5 + centerOffset.
-                // Achieve this by asymmetrically distributing the edge widths:
-                //   wL = w + centerOffset, wR = w - centerOffset   (all in row-fractions)
                 float wL = Mathf.Max(1e-4f, orientation == EdgeOrientation.BothSides ? w + centerOffset : w);
                 float wR = Mathf.Max(1e-4f, orientation == EdgeOrientation.BothSides ? w - centerOffset : w);
 
                 var cols = new Color32[W];
                 for (int x = 0; x < W; x++)
                 {
-                    float u = x / (W - 1f); // 0..1 across the row
+                    float u = x / (W - 1f);
                     float a;
 
                     switch (orientation)
@@ -298,7 +336,7 @@ namespace ProjectFolderColors
                                 a = 1f - SmoothStep01(t);
                                 break;
                             }
-                        default: // BothSides: combine per side (max) so center becomes most transparent
+                        default:
                             {
                                 float tL = Mathf.Clamp01(u / wL);
                                 float tR = Mathf.Clamp01((1f - u) / wR);
@@ -355,7 +393,9 @@ namespace ProjectFolderColors
         }
     }
 
-    // Settings UI (IMGUI)
+    // -------------------------------------------------------------------------
+    // SETTINGS UI (IMGUI)
+    // -------------------------------------------------------------------------
     public class FolderColorsSettingsProvider : SettingsProvider
     {
         SerializedObject so;
