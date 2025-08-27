@@ -420,6 +420,8 @@ namespace ProjectFolderColors
             if (s.rules == null) s.rules = new List<FolderColorRule>();
             so = new SerializedObject(s);
 
+            rootElement.style.paddingLeft = rootElement.style.paddingRight = rootElement.style.paddingTop = rootElement.style.paddingBottom = 8;
+
             enabledProp = so.FindProperty("enabled");
             drawOnSelectedProp = so.FindProperty("drawOnSelected");
             lightenProp = so.FindProperty("subfolderLighten");
@@ -447,7 +449,6 @@ namespace ProjectFolderColors
             so.Update();
 
             EditorGUILayout.LabelField("Folder Colors", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Changes are saved automatically and persist across editor restarts.", MessageType.None);
 
             // Rendering
             EditorGUILayout.LabelField("Rendering", EditorStyles.miniBoldLabel);
