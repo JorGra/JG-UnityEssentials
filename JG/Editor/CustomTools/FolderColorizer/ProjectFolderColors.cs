@@ -7,6 +7,9 @@ using UnityEngine.UIElements;
 
 namespace ProjectFolderColors
 {
+    public enum TintFillMode { Solid, EdgeGradient }
+    public enum EdgeOrientation { BothSides, LeftOnly, RightOnly }
+
     [Serializable]
     public class FolderColorRule
     {
@@ -24,19 +27,39 @@ namespace ProjectFolderColors
         // When false, selected rows are left un-tinted so Unity's selection highlight stays clear.
         public bool drawOnSelected = false;
 
+        // Subfolder look
         [Range(0f, 0.8f)] public float subfolderLighten = 0.25f;
         [Range(0.2f, 1f)] public float subfolderAlphaMultiplier = 0.75f;
+
+        // Rendering
+        public TintFillMode fillMode = TintFillMode.EdgeGradient;
+        [Range(0.05f, 0.45f)] public float edgeWidthFraction = 0.18f;   // per-side, relative to full row width
+        [Range(0f, 1f)] public float edgeFeather = 0.70f;               // 0=hard, 1=soft
+        public EdgeOrientation edgeOrientation = EdgeOrientation.BothSides;
 
         public List<FolderColorRule> rules = new List<FolderColorRule>();
 
         void OnEnable()
         {
-            // Unity 6.x: DO NOT use HideAndDontSave (includes NotEditable which greys out the inspector)
-            hideFlags = HideFlags.DontSaveInEditor;
+            // Unity 6.x: allow editing & saving; do NOT use HideAndDontSave or DontSaveInEditor here.
+            hideFlags = HideFlags.None;
+            // Heal legacy NotEditable bit just in case
+            hideFlags &= ~HideFlags.NotEditable;
+
             if (rules == null) rules = new List<FolderColorRule>();
         }
 
-        public void SaveSettings() => Save(true);
+        void OnDisable()
+        {
+            // Safety: persist whatever is currently in memory when domain reload / editor closes.
+            SaveSettings();
+        }
+
+        public void SaveSettings()
+        {
+            EditorUtility.SetDirty(this); // ensure flagged for write
+            Save(true);                   // write to ProjectSettings as text
+        }
     }
 
     [InitializeOnLoad]
@@ -98,15 +121,30 @@ namespace ProjectFolderColors
             var (hasColor, color, isRoot) = GetColorForPath(path, s);
             if (!hasColor || Event.current.type != EventType.Repaint) return;
 
-            // full row background
-            var rowRect = selectionRect;
-            rowRect.x = 0f;
-            rowRect.width = EditorGUIUtility.currentViewWidth;
-            EditorGUI.DrawRect(rowRect, color);
+            if (s.fillMode == TintFillMode.Solid)
+            {
+                // full row background
+                var rowRect = selectionRect;
+                rowRect.x = 0f;
+                rowRect.width = EditorGUIUtility.currentViewWidth;
+                EditorGUI.DrawRect(rowRect, color);
 
-            // small left stripe to hint hierarchy
-            var stripe = new Rect(0f, selectionRect.y, 4f, selectionRect.height);
-            EditorGUI.DrawRect(stripe, isRoot ? color : Darken(color, 0.08f));
+                // small left stripe to hint hierarchy
+                var stripe = new Rect(0f, selectionRect.y, 4f, selectionRect.height);
+                EditorGUI.DrawRect(stripe, isRoot ? color : Darken(color, 0.08f));
+            }
+            else // EdgeGradient
+            {
+                var rowRect = selectionRect;
+                rowRect.x = 0f;
+                rowRect.width = EditorGUIUtility.currentViewWidth;
+
+                var tex = EdgeGradient.Get(s.edgeWidthFraction, s.edgeFeather, s.edgeOrientation);
+                var prev = GUI.color;
+                GUI.color = color;
+                GUI.DrawTexture(rowRect, tex, ScaleMode.StretchToFill, alphaBlend: true);
+                GUI.color = prev;
+            }
         }
 
         static bool IsSelected(string guid)
@@ -198,9 +236,90 @@ namespace ProjectFolderColors
 
         [MenuItem("Window/Folder Colors/Project Settings...", priority = 2010)]
         static void OpenSettings() => SettingsService.OpenProjectSettings("Project/Folder Colors");
+
+        // ---------- Edge Gradient generator ----------
+        static class EdgeGradient
+        {
+            // cache by quantized parameters (edge width, feather, orientation)
+            static readonly Dictionary<int, Texture2D> _cache = new Dictionary<int, Texture2D>();
+
+            public static Texture2D Get(float edgeWidthFraction, float feather01, EdgeOrientation orientation)
+            {
+                // Clamp + quantize so cache stays small
+                edgeWidthFraction = Mathf.Clamp(edgeWidthFraction, 0.02f, 0.48f);
+                feather01 = Mathf.Clamp01(feather01);
+                int key = (Mathf.RoundToInt(edgeWidthFraction * 1000f) << 21)
+                          | (Mathf.RoundToInt(feather01 * 1000f) << 10)
+                          | (int)orientation;
+
+                if (_cache.TryGetValue(key, out var tex) && tex) return tex;
+
+                // Build a horizontal 256x1 alpha ramp
+                const int W = 256;
+                tex = new Texture2D(W, 1, TextureFormat.RGBA32, false, true)
+                {
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear,
+                    hideFlags = HideFlags.HideAndDontSave,
+                    name = $"EdgeGrad_w{edgeWidthFraction:0.00}_f{feather01:0.00}_o{orientation}"
+                };
+
+                float w = Mathf.Max(1e-4f, edgeWidthFraction); // per-side width as fraction of full row
+                // Feather controls curve: 0 (hard) -> 1 (soft)
+                float gamma = Mathf.Lerp(0.6f, 3.0f, feather01);
+
+                var cols = new Color32[W];
+                for (int x = 0; x < W; x++)
+                {
+                    float u = x / (W - 1f); // 0..1 across the row
+                    float a;
+
+                    switch (orientation)
+                    {
+                        case EdgeOrientation.LeftOnly:
+                            {
+                                // 1 at left edge, 0 at u >= w
+                                float t = Mathf.Clamp01(u / w);
+                                a = 1f - SmoothStep01(t);
+                                break;
+                            }
+                        case EdgeOrientation.RightOnly:
+                            {
+                                // 1 at right edge, 0 at u <= (1 - w)
+                                float t = Mathf.Clamp01((1f - u) / w);
+                                a = 1f - SmoothStep01(t);
+                                break;
+                            }
+                        default: // BothSides
+                            {
+                                // distance to nearest edge: 0 at edges, 0.5 at center
+                                float d = Mathf.Min(u, 1f - u);   // 0..0.5
+                                float t = Mathf.Clamp01(d / w);   // 0 at edge, 1 at/after w
+                                a = 1f - SmoothStep01(t);
+                                break;
+                            }
+                    }
+
+                    // Adjust softness
+                    a = Mathf.Pow(a, gamma);
+                    cols[x] = new Color(1f, 1f, 1f, a);
+                }
+
+                tex.SetPixels32(cols);
+                tex.Apply(false, true); // upload & make non-readable
+                _cache[key] = tex;
+                return tex;
+            }
+
+            static float SmoothStep01(float x)
+            {
+                x = Mathf.Clamp01(x);
+                return x * x * (3f - 2f * x);
+            }
+        }
     }
 
-    // Settings UI (IMGUI) — streamlined, auto-save, no extra buttons
+    // Settings UI (IMGUI) — streamlined, auto-save, with Edge Gradient controls
     public class FolderColorsSettingsProvider : SettingsProvider
     {
         SerializedObject so;
@@ -209,6 +328,11 @@ namespace ProjectFolderColors
         SerializedProperty lightenProp;
         SerializedProperty alphaMulProp;
         SerializedProperty rulesProp;
+
+        SerializedProperty fillModeProp;
+        SerializedProperty edgeWidthProp;
+        SerializedProperty edgeFeatherProp;
+        SerializedProperty edgeOrientationProp;
 
         public FolderColorsSettingsProvider(string path, SettingsScope scope) : base(path, scope) { }
 
@@ -221,11 +345,17 @@ namespace ProjectFolderColors
 
             if (s.rules == null) s.rules = new List<FolderColorRule>();
             so = new SerializedObject(s);
+
             enabledProp = so.FindProperty("enabled");
             drawOnSelectedProp = so.FindProperty("drawOnSelected");
             lightenProp = so.FindProperty("subfolderLighten");
             alphaMulProp = so.FindProperty("subfolderAlphaMultiplier");
             rulesProp = so.FindProperty("rules");
+
+            fillModeProp = so.FindProperty("fillMode");
+            edgeWidthProp = so.FindProperty("edgeWidthFraction");
+            edgeFeatherProp = so.FindProperty("edgeFeather");
+            edgeOrientationProp = so.FindProperty("edgeOrientation");
         }
 
         static void ApplyAndRefresh(SerializedObject so)
@@ -242,15 +372,40 @@ namespace ProjectFolderColors
             so.Update();
 
             EditorGUILayout.LabelField("Folder Colors", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Changes are saved automatically.", MessageType.None);
+            EditorGUILayout.HelpBox("Changes are saved automatically and persist across editor restarts.", MessageType.None);
 
+            // Rendering
+            EditorGUILayout.LabelField("Rendering", EditorStyles.miniBoldLabel);
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(fillModeProp, new GUIContent("Fill Mode"));
+            if ((TintFillMode)fillModeProp.enumValueIndex == TintFillMode.EdgeGradient)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.Slider(edgeWidthProp, 0.05f, 0.45f, new GUIContent("Edge Width (%)"));
+                EditorGUILayout.Slider(edgeFeatherProp, 0f, 1f, new GUIContent("Feather"));
+                EditorGUILayout.PropertyField(edgeOrientationProp, new GUIContent("Edge Orientation"));
+                EditorGUI.indentLevel--;
+                EditorGUILayout.HelpBox("Edge Gradient colors the sides of each row and fades toward the center so text remains readable.", MessageType.Info);
+            }
+            if (EditorGUI.EndChangeCheck())
+                ApplyAndRefresh(so);
+
+            EditorGUILayout.Space(6);
+
+            // General toggles
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(enabledProp, new GUIContent("Enabled"));
             EditorGUILayout.PropertyField(drawOnSelectedProp, new GUIContent("Tint Selected Rows"));
+            if (EditorGUI.EndChangeCheck())
+                ApplyAndRefresh(so);
 
-            EditorGUILayout.Space(4);
+            EditorGUILayout.Space(6);
             EditorGUILayout.LabelField("Subfolder Appearance", EditorStyles.miniBoldLabel);
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.Slider(lightenProp, 0f, 0.8f, new GUIContent("Lighten Amount"));
             EditorGUILayout.Slider(alphaMulProp, 0.2f, 1f, new GUIContent("Alpha Multiplier"));
+            if (EditorGUI.EndChangeCheck())
+                ApplyAndRefresh(so);
 
             EditorGUILayout.Space();
             using (new EditorGUILayout.HorizontalScope())
@@ -283,7 +438,7 @@ namespace ProjectFolderColors
                 }
             }
 
-            EditorGUILayout.HelpBox("Each rule tints a folder. Subfolders inherit a lighter, slightly more transparent color.", MessageType.Info);
+            EditorGUILayout.HelpBox("Each rule tints a folder. Subfolders inherit a lighter, slightly more transparent color.", MessageType.None);
 
             if (rulesProp != null && rulesProp.isArray)
             {
@@ -357,7 +512,7 @@ namespace ProjectFolderColors
                 }
             }
 
-            // Final auto-apply in case anything else changed
+            // Final catch-all apply
             if (so.ApplyModifiedProperties())
             {
                 FolderColorsSettings.instance.SaveSettings();
@@ -370,7 +525,7 @@ namespace ProjectFolderColors
         public static SettingsProvider Create() =>
             new FolderColorsSettingsProvider("Project/Folder Colors", SettingsScope.Project)
             {
-                keywords = new HashSet<string>(new[] { "folder", "color", "project", "subfolder", "tint" })
+                keywords = new HashSet<string>(new[] { "folder", "color", "project", "subfolder", "tint", "gradient", "edge", "right", "left" })
             };
     }
 }
