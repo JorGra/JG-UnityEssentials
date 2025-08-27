@@ -1,6 +1,8 @@
 ﻿#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -13,9 +15,9 @@ namespace ProjectFolderColors
     [Serializable]
     public class FolderColorRule
     {
-        public DefaultAsset folder;                 // Assign via object field
+        // NOTE: store only serializable, path-based data (Unity 6.1 safe)
         public string folderPath = "Assets";        // Normalized "Assets/..." path
-        public Color baseColor = new Color(0.20f, 0.60f, 1f, 0.15f);
+        public Color baseColor = new Color(0.20f, 0.60f, 1f, 0.45f);
     }
 
     // Stored under ProjectSettings (kept out of Assets/)
@@ -23,45 +25,38 @@ namespace ProjectFolderColors
     public class FolderColorsSettings : ScriptableSingleton<FolderColorsSettings>
     {
         public bool enabled = true;
-
-        // When false, selected rows are left un-tinted so Unity's selection highlight stays clear.
         public bool drawOnSelected = false;
 
-        // Subfolder look
         [Range(0f, 0.8f)] public float subfolderLighten = 0.25f;
         [Range(0.2f, 1f)] public float subfolderAlphaMultiplier = 0.75f;
 
-        // Rendering
         public TintFillMode fillMode = TintFillMode.EdgeGradient;
-        [Range(0.05f, 0.45f)] public float edgeWidthFraction = 0.18f;   // per-side, relative to full row width
-        [Range(0f, 1f)] public float edgeFeather = 0.70f;               // 0=hard, 1=soft
+        [Range(0.05f, 0.9f)] public float edgeWidthFraction = 0.18f;
+        [Range(0f, 1f)] public float edgeFeather = 0.70f;
         public EdgeOrientation edgeOrientation = EdgeOrientation.BothSides;
+        [Range(-0.4f, 0.4f)] public float centerOffset = 0f;
 
         public List<FolderColorRule> rules = new List<FolderColorRule>();
 
+        public static string FilePath => GetFilePath();
+
         void OnEnable()
         {
-            // Unity 6.x: allow editing & saving; do NOT use HideAndDontSave or DontSaveInEditor here.
-            hideFlags = HideFlags.None;
-            // Heal legacy NotEditable bit just in case
-            hideFlags &= ~HideFlags.NotEditable;
-
+            // Let ScriptableSingleton keep its default HideAndDontSave behavior.
+            // (You can still clear NotEditable in the SettingsProvider if you want UI editing.)
             if (rules == null) rules = new List<FolderColorRule>();
-        }
-
-        void OnDisable()
-        {
-            // Safety: persist whatever is currently in memory when domain reload / editor closes.
-            SaveSettings();
         }
 
         public void SaveSettings()
         {
-            EditorUtility.SetDirty(this); // ensure flagged for write
-            Save(true);                   // write to ProjectSettings as text
+            // Ensure the target directory exists, then let ScriptableSingleton write the file.
+            var path = GetFilePath();
+            var dir = System.IO.Path.GetDirectoryName(path);
+            if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+
+            Save(true); // text JSON in ProjectSettings
         }
     }
-
     [InitializeOnLoad]
     public static class FolderColorizer
     {
@@ -70,14 +65,23 @@ namespace ProjectFolderColors
 
         static string[] cachedSelectionGuids = Array.Empty<string>();
 
+        [MenuItem("Window/Folder Colors/Debug/Print Save Path")]
+        static void PrintSavePath()
+        {
+            var s = FolderColorsSettings.instance;
+            Debug.Log($"Saving to: {FolderColorsSettings.FilePath} | rules: {s.rules?.Count ?? 0} | exists: {System.IO.File.Exists(FolderColorsSettings.FilePath)}");
+        }
+
         static FolderColorizer()
         {
             BuildCache();
+
             EditorApplication.projectWindowItemOnGUI += OnProjectWindowItemGUI;
             Selection.selectionChanged += () =>
             {
                 cachedSelectionGuids = Selection.assetGUIDs ?? Array.Empty<string>();
             };
+
             EditorApplication.delayCall += EditorApplication.RepaintProjectWindow;
         }
 
@@ -91,18 +95,11 @@ namespace ProjectFolderColors
             foreach (var r in s.rules)
             {
                 if (r == null) continue;
-
-                var path = r.folder ? AssetDatabase.GetAssetPath(r.folder) : r.folderPath;
-                path = NormalizePath(path);
+                var path = NormalizePath(r.folderPath);
                 if (string.IsNullOrEmpty(path) || !AssetDatabase.IsValidFolder(path)) continue;
 
-                // Keep both fields in sync for reliability
+                // keep normalized path stored back
                 r.folderPath = path;
-                if (r.folder == null)
-                {
-                    var obj = AssetDatabase.LoadAssetAtPath<DefaultAsset>(path);
-                    if (obj) r.folder = obj;
-                }
 
                 rootColorByPath[path] = r.baseColor; // last rule wins
             }
@@ -117,34 +114,41 @@ namespace ProjectFolderColors
             if (string.IsNullOrEmpty(path) || !AssetDatabase.IsValidFolder(path)) return;
 
             if (!s.drawOnSelected && IsSelected(guid)) return;
+            if (Event.current.type != EventType.Repaint) return;
 
             var (hasColor, color, isRoot) = GetColorForPath(path, s);
-            if (!hasColor || Event.current.type != EventType.Repaint) return;
+            if (!hasColor) return;
+
+            var rowRect = GetRowRect(selectionRect); // respects right-side detail panel
 
             if (s.fillMode == TintFillMode.Solid)
             {
-                // full row background
-                var rowRect = selectionRect;
-                rowRect.x = 0f;
-                rowRect.width = EditorGUIUtility.currentViewWidth;
                 EditorGUI.DrawRect(rowRect, color);
 
-                // small left stripe to hint hierarchy
                 var stripe = new Rect(0f, selectionRect.y, 4f, selectionRect.height);
                 EditorGUI.DrawRect(stripe, isRoot ? color : Darken(color, 0.08f));
             }
             else // EdgeGradient
             {
-                var rowRect = selectionRect;
-                rowRect.x = 0f;
-                rowRect.width = EditorGUIUtility.currentViewWidth;
+                var tex = EdgeGradient.Get(
+                    s.edgeWidthFraction,
+                    s.edgeFeather,
+                    s.edgeOrientation,
+                    s.edgeOrientation == EdgeOrientation.BothSides ? s.centerOffset : 0f
+                );
 
-                var tex = EdgeGradient.Get(s.edgeWidthFraction, s.edgeFeather, s.edgeOrientation);
                 var prev = GUI.color;
                 GUI.color = color;
                 GUI.DrawTexture(rowRect, tex, ScaleMode.StretchToFill, alphaBlend: true);
                 GUI.color = prev;
             }
+        }
+
+        static Rect GetRowRect(Rect selectionRect)
+        {
+            var clip = GUIClipUtil.VisibleRect; // (0,0)-(treeWidth,visibleHeight) in the tree’s GUI group
+            float width = clip.width > 0f ? clip.width : Mathf.Max(1f, selectionRect.xMax);
+            return new Rect(0f, selectionRect.y, width, selectionRect.height);
         }
 
         static bool IsSelected(string guid)
@@ -223,7 +227,6 @@ namespace ProjectFolderColors
 
             s.rules.Add(new FolderColorRule
             {
-                folder = sel,
                 folderPath = NormalizePath(path),
                 baseColor = new Color(0.20f, 0.60f, 1f, 0.15f)
             });
@@ -237,36 +240,43 @@ namespace ProjectFolderColors
         [MenuItem("Window/Folder Colors/Project Settings...", priority = 2010)]
         static void OpenSettings() => SettingsService.OpenProjectSettings("Project/Folder Colors");
 
-        // ---------- Edge Gradient generator ----------
+        // ---------- Edge Gradient generator (now with center offset) ----------
         static class EdgeGradient
         {
-            // cache by quantized parameters (edge width, feather, orientation)
+            // cache by quantized parameters (edge width, feather, orientation, center offset)
             static readonly Dictionary<int, Texture2D> _cache = new Dictionary<int, Texture2D>();
 
-            public static Texture2D Get(float edgeWidthFraction, float feather01, EdgeOrientation orientation)
+            public static Texture2D Get(float edgeWidthFraction, float feather01, EdgeOrientation orientation, float centerOffset)
             {
-                // Clamp + quantize so cache stays small
                 edgeWidthFraction = Mathf.Clamp(edgeWidthFraction, 0.02f, 0.48f);
                 feather01 = Mathf.Clamp01(feather01);
-                int key = (Mathf.RoundToInt(edgeWidthFraction * 1000f) << 21)
-                          | (Mathf.RoundToInt(feather01 * 1000f) << 10)
-                          | (int)orientation;
+                centerOffset = Mathf.Clamp(centerOffset, -0.40f, 0.40f);
+
+                // build key (10 bits each is ample after *1000 quantization)
+                int key = (Mathf.RoundToInt(edgeWidthFraction * 1000f) << 22)
+                        | (Mathf.RoundToInt(feather01 * 1000f) << 12)
+                        | ((int)orientation << 10)
+                        | (Mathf.RoundToInt((centerOffset + 0.5f) * 1023f) & 0x3FF);
 
                 if (_cache.TryGetValue(key, out var tex) && tex) return tex;
 
-                // Build a horizontal 256x1 alpha ramp
                 const int W = 256;
                 tex = new Texture2D(W, 1, TextureFormat.RGBA32, false, true)
                 {
                     wrapMode = TextureWrapMode.Clamp,
                     filterMode = FilterMode.Bilinear,
-                    hideFlags = HideFlags.HideAndDontSave,
-                    name = $"EdgeGrad_w{edgeWidthFraction:0.00}_f{feather01:0.00}_o{orientation}"
+                    name = $"EdgeGrad_w{edgeWidthFraction:0.00}_f{feather01:0.00}_o{orientation}_c{centerOffset:0.00}"
                 };
 
-                float w = Mathf.Max(1e-4f, edgeWidthFraction); // per-side width as fraction of full row
-                // Feather controls curve: 0 (hard) -> 1 (soft)
+                float w = Mathf.Max(1e-4f, edgeWidthFraction);
                 float gamma = Mathf.Lerp(0.6f, 3.0f, feather01);
+
+                // For BothSides, split per-side widths with a center shift.
+                // We want the transparent “plateau” midpoint at 0.5 + centerOffset.
+                // Achieve this by asymmetrically distributing the edge widths:
+                //   wL = w + centerOffset, wR = w - centerOffset   (all in row-fractions)
+                float wL = Mathf.Max(1e-4f, orientation == EdgeOrientation.BothSides ? w + centerOffset : w);
+                float wR = Mathf.Max(1e-4f, orientation == EdgeOrientation.BothSides ? w - centerOffset : w);
 
                 var cols = new Color32[W];
                 for (int x = 0; x < W; x++)
@@ -278,35 +288,33 @@ namespace ProjectFolderColors
                     {
                         case EdgeOrientation.LeftOnly:
                             {
-                                // 1 at left edge, 0 at u >= w
-                                float t = Mathf.Clamp01(u / w);
+                                float t = Mathf.Clamp01(u / wL);
                                 a = 1f - SmoothStep01(t);
                                 break;
                             }
                         case EdgeOrientation.RightOnly:
                             {
-                                // 1 at right edge, 0 at u <= (1 - w)
-                                float t = Mathf.Clamp01((1f - u) / w);
+                                float t = Mathf.Clamp01((1f - u) / wR);
                                 a = 1f - SmoothStep01(t);
                                 break;
                             }
-                        default: // BothSides
+                        default: // BothSides: combine per side (max) so center becomes most transparent
                             {
-                                // distance to nearest edge: 0 at edges, 0.5 at center
-                                float d = Mathf.Min(u, 1f - u);   // 0..0.5
-                                float t = Mathf.Clamp01(d / w);   // 0 at edge, 1 at/after w
-                                a = 1f - SmoothStep01(t);
+                                float tL = Mathf.Clamp01(u / wL);
+                                float tR = Mathf.Clamp01((1f - u) / wR);
+                                float aL = 1f - SmoothStep01(tL);
+                                float aR = 1f - SmoothStep01(tR);
+                                a = Mathf.Max(aL, aR);
                                 break;
                             }
                     }
 
-                    // Adjust softness
                     a = Mathf.Pow(a, gamma);
                     cols[x] = new Color(1f, 1f, 1f, a);
                 }
 
                 tex.SetPixels32(cols);
-                tex.Apply(false, true); // upload & make non-readable
+                tex.Apply(false, true);
                 _cache[key] = tex;
                 return tex;
             }
@@ -317,9 +325,37 @@ namespace ProjectFolderColors
                 return x * x * (3f - 2f * x);
             }
         }
+
+        // ---------- Internal GUIClip helper ----------
+        static class GUIClipUtil
+        {
+            static Func<Rect> _getter;
+            public static Rect VisibleRect
+            {
+                get
+                {
+                    if (_getter == null)
+                    {
+                        var asm = typeof(GUI).Assembly; // UnityEngine
+                        var t = asm.GetType("UnityEngine.GUIClip");
+                        var prop = t?.GetProperty("visibleRect", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (prop != null)
+                        {
+                            var getMethod = prop.GetGetMethod(true);
+                            _getter = (Func<Rect>)Delegate.CreateDelegate(typeof(Func<Rect>), getMethod);
+                        }
+                        else
+                        {
+                            _getter = () => new Rect(0, 0, 0, 0);
+                        }
+                    }
+                    return _getter();
+                }
+            }
+        }
     }
 
-    // Settings UI (IMGUI) — streamlined, auto-save, with Edge Gradient controls
+    // Settings UI (IMGUI)
     public class FolderColorsSettingsProvider : SettingsProvider
     {
         SerializedObject so;
@@ -333,15 +369,13 @@ namespace ProjectFolderColors
         SerializedProperty edgeWidthProp;
         SerializedProperty edgeFeatherProp;
         SerializedProperty edgeOrientationProp;
+        SerializedProperty centerOffsetProp;
 
         public FolderColorsSettingsProvider(string path, SettingsScope scope) : base(path, scope) { }
 
         public override void OnActivate(string searchContext, VisualElement rootElement)
         {
             var s = FolderColorsSettings.instance;
-
-            // Heal legacy NotEditable bit if present (Unity 6.x)
-            s.hideFlags &= ~HideFlags.NotEditable;
 
             if (s.rules == null) s.rules = new List<FolderColorRule>();
             so = new SerializedObject(s);
@@ -356,6 +390,7 @@ namespace ProjectFolderColors
             edgeWidthProp = so.FindProperty("edgeWidthFraction");
             edgeFeatherProp = so.FindProperty("edgeFeather");
             edgeOrientationProp = so.FindProperty("edgeOrientation");
+            centerOffsetProp = so.FindProperty("centerOffset");
         }
 
         static void ApplyAndRefresh(SerializedObject so)
@@ -384,8 +419,12 @@ namespace ProjectFolderColors
                 EditorGUILayout.Slider(edgeWidthProp, 0.05f, 0.45f, new GUIContent("Edge Width (%)"));
                 EditorGUILayout.Slider(edgeFeatherProp, 0f, 1f, new GUIContent("Feather"));
                 EditorGUILayout.PropertyField(edgeOrientationProp, new GUIContent("Edge Orientation"));
+                if ((EdgeOrientation)edgeOrientationProp.enumValueIndex == EdgeOrientation.BothSides)
+                {
+                    EditorGUILayout.Slider(centerOffsetProp, -0.4f, 0.4f, new GUIContent("Center Offset (± row width)"));
+                    EditorGUILayout.HelpBox("Shifts the most transparent center left/right. Example: 0.12 ≈ 12% to the right.", MessageType.None);
+                }
                 EditorGUI.indentLevel--;
-                EditorGUILayout.HelpBox("Edge Gradient colors the sides of each row and fades toward the center so text remains readable.", MessageType.Info);
             }
             if (EditorGUI.EndChangeCheck())
                 ApplyAndRefresh(so);
@@ -425,11 +464,9 @@ namespace ProjectFolderColors
                         string selectedPath = selected ? AssetDatabase.GetAssetPath(selected) : null;
                         if (string.IsNullOrEmpty(selectedPath) || !AssetDatabase.IsValidFolder(selectedPath))
                         {
-                            selected = null;
                             selectedPath = "Assets";
                         }
 
-                        elem.FindPropertyRelative("folder").objectReferenceValue = selected;
                         elem.FindPropertyRelative("folderPath").stringValue = FolderColorizer.NormalizePath(selectedPath);
                         elem.FindPropertyRelative("baseColor").colorValue = new Color(0.20f, 0.60f, 1f, 0.15f);
 
@@ -459,13 +496,28 @@ namespace ProjectFolderColors
                         }
                     }
 
-                    var folderProp = e.FindPropertyRelative("folder");
                     var pathProp = e.FindPropertyRelative("folderPath");
                     var colorProp = e.FindPropertyRelative("baseColor");
 
-                    // Folder object & color (apply immediately)
+                    // Convenience: object field derived from path (writes back to path when changed)
+                    DefaultAsset currentObj = null;
+                    if (!string.IsNullOrEmpty(pathProp.stringValue))
+                        currentObj = AssetDatabase.LoadAssetAtPath<DefaultAsset>(pathProp.stringValue);
+
                     EditorGUI.BeginChangeCheck();
-                    EditorGUILayout.PropertyField(folderProp, new GUIContent("Folder"));
+                    var newObj = (DefaultAsset)EditorGUILayout.ObjectField("Folder", currentObj, typeof(DefaultAsset), false);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        string newPath = newObj ? AssetDatabase.GetAssetPath(newObj) : pathProp.stringValue;
+                        if (!string.IsNullOrEmpty(newPath) && AssetDatabase.IsValidFolder(newPath))
+                        {
+                            pathProp.stringValue = FolderColorizer.NormalizePath(newPath);
+                            ApplyAndRefresh(so);
+                        }
+                    }
+
+                    // Color (apply immediately)
+                    EditorGUI.BeginChangeCheck();
                     EditorGUILayout.PropertyField(colorProp, new GUIContent("Base Color"));
                     if (EditorGUI.EndChangeCheck())
                         ApplyAndRefresh(so);
@@ -474,22 +526,7 @@ namespace ProjectFolderColors
                     EditorGUILayout.BeginHorizontal();
                     EditorGUI.BeginChangeCheck();
                     string typed = EditorGUILayout.DelayedTextField("Folder Path", pathProp.stringValue);
-                    if (GUILayout.Button("Use Selected", GUILayout.Width(110)))
-                    {
-                        var sel = Selection.activeObject as DefaultAsset;
-                        string p = sel ? AssetDatabase.GetAssetPath(sel) : null;
-                        if (!string.IsNullOrEmpty(p) && AssetDatabase.IsValidFolder(p))
-                        {
-                            p = FolderColorizer.NormalizePath(p);
-                            pathProp.stringValue = p;
-                            folderProp.objectReferenceValue = AssetDatabase.LoadAssetAtPath<DefaultAsset>(p);
-                            ApplyAndRefresh(so);
-                        }
-                        else
-                        {
-                            EditorUtility.DisplayDialog("Folder Colors", "Please select a folder in the Project window.", "OK");
-                        }
-                    }
+                    bool useSel = GUILayout.Button("Use Selected", GUILayout.Width(110));
                     EditorGUILayout.EndHorizontal();
 
                     if (EditorGUI.EndChangeCheck())
@@ -498,13 +535,27 @@ namespace ProjectFolderColors
                         if (!string.IsNullOrEmpty(normalized) && AssetDatabase.IsValidFolder(normalized))
                         {
                             pathProp.stringValue = normalized;
-                            var obj = AssetDatabase.LoadAssetAtPath<DefaultAsset>(normalized);
-                            folderProp.objectReferenceValue = obj;
                             ApplyAndRefresh(so);
                         }
                         else if (!string.IsNullOrEmpty(typed))
                         {
                             EditorGUILayout.HelpBox("Invalid path. Use a folder under 'Assets/...'", MessageType.Warning);
+                        }
+                    }
+
+                    if (useSel)
+                    {
+                        var sel = Selection.activeObject as DefaultAsset;
+                        string p = sel ? AssetDatabase.GetAssetPath(sel) : null;
+                        if (!string.IsNullOrEmpty(p) && AssetDatabase.IsValidFolder(p))
+                        {
+                            p = FolderColorizer.NormalizePath(p);
+                            pathProp.stringValue = p;
+                            ApplyAndRefresh(so);
+                        }
+                        else
+                        {
+                            EditorUtility.DisplayDialog("Folder Colors", "Please select a folder in the Project window.", "OK");
                         }
                     }
 
@@ -525,7 +576,7 @@ namespace ProjectFolderColors
         public static SettingsProvider Create() =>
             new FolderColorsSettingsProvider("Project/Folder Colors", SettingsScope.Project)
             {
-                keywords = new HashSet<string>(new[] { "folder", "color", "project", "subfolder", "tint", "gradient", "edge", "right", "left" })
+                keywords = new HashSet<string>(new[] { "folder", "color", "project", "subfolder", "tint", "gradient", "edge", "right", "left", "center" })
             };
     }
 }
