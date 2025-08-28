@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.SceneManagement; // needed for loadedSceneCount
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -126,11 +127,9 @@ namespace SelectionHistorySystem
                 if (string.IsNullOrEmpty(path))
                     return null;
 
-                // If it's actually a .unity scene file, we load it as SceneAsset
-                // to avoid enumerating sub-objects inside the scene file
-                if (path.EndsWith(".unity", System.StringComparison.OrdinalIgnoreCase))
+                // If it's actually a .unity scene file, load as SceneAsset
+                if (path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Return the main SceneAsset
                     return AssetDatabase.LoadAssetAtPath<SceneAsset>(path);
                 }
 
@@ -148,7 +147,12 @@ namespace SelectionHistorySystem
             }
             else if (isSceneObject)
             {
-                // Re-hydrate a scene object
+                // Avoid rehydrating scene objects when multiple scenes are loaded to
+                // prevent "Cross scene references are not supported" editor warnings.
+                if (UnityEngine.SceneManagement.SceneManager.loadedSceneCount > 1)
+                    return null;
+
+                // Safe when only one scene is loaded.
                 return GlobalObjectId.GlobalObjectIdentifierToObjectSlow(globalId);
             }
 
