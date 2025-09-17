@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using JG.Tools.SceneManagement.Editor;
 
 /// <summary>
 /// Editor window for quick switching between build-configured scenes.
@@ -17,6 +18,8 @@ public class QuickSceneSwitcher : EditorWindow
     private Texture2D playIcon;
     private Texture2D loadAdditiveIcon;
     private GUIContent reloadIcon;
+    private GUIContent bootstrapperEnabledIcon;
+    private GUIContent bootstrapperDisabledIcon;
 
     /// <summary>
     /// Opens the Scene Switcher window.
@@ -39,6 +42,20 @@ public class QuickSceneSwitcher : EditorWindow
         reloadIcon = EditorGUIUtility.IconContent("Refresh");
         if (reloadIcon.image == null)
             reloadIcon = new GUIContent("\u21BB");
+
+        var enabledIcon = EditorGUIUtility.IconContent("TestPassed");
+        if (enabledIcon != null && enabledIcon.image != null)
+            bootstrapperEnabledIcon = new GUIContent(enabledIcon);
+        else
+            bootstrapperEnabledIcon = new GUIContent("On");
+        bootstrapperEnabledIcon.tooltip = "Bootstrapper enabled. Click to disable.";
+
+        var disabledIcon = EditorGUIUtility.IconContent("TestFailed");
+        if (disabledIcon != null && disabledIcon.image != null)
+            bootstrapperDisabledIcon = new GUIContent(disabledIcon);
+        else
+            bootstrapperDisabledIcon = new GUIContent("Off");
+        bootstrapperDisabledIcon.tooltip = "Bootstrapper disabled. Click to enable.";
     }
 
     private void OnGUI()
@@ -173,6 +190,17 @@ public class QuickSceneSwitcher : EditorWindow
         using (new EditorGUILayout.HorizontalScope())
         {
             GUILayout.FlexibleSpace();
+
+            bool bootstrapperEnabled = BootstrapperEditorUtility.IsBootstrapperEnabled;
+            var toggleContent = bootstrapperEnabled ? bootstrapperEnabledIcon : bootstrapperDisabledIcon;
+            if (GUILayout.Button(toggleContent, GUIStyle.none,
+                                 GUILayout.Width(20), GUILayout.Height(20)))
+            {
+                BootstrapperEditorUtility.IsBootstrapperEnabled = !bootstrapperEnabled;
+                BootstrapperEditorUtility.ApplyBootstrapperSceneSetting();
+                Repaint();
+            }
+
             // Small reload icon instead of text
             if (GUILayout.Button(reloadIcon, GUIStyle.none,
                                  GUILayout.Width(20), GUILayout.Height(20)))
@@ -208,3 +236,5 @@ public class QuickSceneSwitcher : EditorWindow
             Debug.LogWarning("You must be in play mode to load scenes additively.");
     }
 }
+
+
