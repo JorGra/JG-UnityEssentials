@@ -53,9 +53,8 @@ public void StopListening()
 | Type | What it does | Notes |
 |------|--------------|-------|
 | `IEvent` | Marker interface every payload implements. Works with structs or classes. | `Assets/JG-UnityEssentials/JG/Tools/EventBus/IEvent.cs` |
-| `EventBus<T>` | Static hub that stores listeners for payload `T` and synchronously calls them when `Raise` is invoked. | Supports `Subscribe`, `Register`, `Deregister`, `Raise`. |
+| `EventBus<T>` | Static hub that stores listeners for payload `T` and synchronously calls them when `Raise` is invoked. | Supports `Subscribe` and `Raise`. |
 | `EventSubscription<T>` | Disposable handle returned from `Subscribe`. Disposing removes the listener. | Store when you need manual lifetime control. |
-| `EventBinding<T>` | Legacy binding container kept for backwards compatibility. | Prefer `Subscribe`/helpers unless migrating old code. |
 | `EventSubscriptionExtensions` | Adds `this.SubscribeEvent<T>` helpers to `MonoBehaviour`. | Uses `EventSubscriptionTracker` under the hood. |
 | `EventSubscriptionGroup` | Tracks bus subscriptions plus arbitrary `IDisposable` instances as a batch. | Useful for coordinating multiple resources. |
 | `EventSubscriptionTracker` | Hidden component that owns one `EventSubscriptionGroup` per subscribing component and disposes listeners on disable/destroy. | Automatically added to the listener's `GameObject`. |
@@ -155,7 +154,7 @@ Call `group.DisposeOnDisable()` when you want to remove only the listeners flagg
 - Nothing fires? Ensure the payload type implements `IEvent` and that the listener is subscribing to the same generic type.
 - Double execution? Check you are not calling `SubscribeEvent` from both `Awake` and `OnEnable`.
 - Handler missing after disabling a component? Pass `disposeOnDisable: false` when subscribing if the component gets toggled off temporarily.
-- Want to inspect current listeners? Temporarily add logging inside `EventBus<T>.Register` or `EventBus<T>.Raise`; all subscriptions funnel through those methods.
+- Want to inspect current listeners? Temporarily add logging inside `EventBus<T>.Subscribe` or `EventBus<T>.Raise`; all subscriptions funnel through those methods.
 
 ## Reference Files
 

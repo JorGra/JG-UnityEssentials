@@ -8,37 +8,12 @@ public static class EventBus<T> where T : IEvent
     static readonly List<BindingEntry> bindings = new List<BindingEntry>();
     static bool warnOnClear = true;
 
-    public static void Register(IEventBinding<T> binding) => Register(binding, null);
-
-    public static void Register(IEventBinding<T> binding, UnityEngine.Object owner) => Register(binding, owner, true);
-
-    public static void Register(IEventBinding<T> binding, UnityEngine.Object owner, bool autoDeregisterOnOwnerDestroyed)
-    {
-        if (binding == null)
-            throw new ArgumentNullException(nameof(binding));
-
-        PruneDeadBindings();
-
-        // Prevent duplicate registrations of the same binding instance.
-        for (int i = 0; i < bindings.Count; i++)
-        {
-            if (ReferenceEquals(bindings[i].Binding, binding))
-            {
-                return;
-            }
-        }
-
-        bindings.Add(new BindingEntry(binding, owner, autoDeregisterOnOwnerDestroyed));
-    }
-
     public static EventSubscription<T> Subscribe(Action<T> handler, UnityEngine.Object owner = null, bool autoDeregisterOnOwnerDestroyed = true)
     {
         if (handler == null)
             throw new ArgumentNullException(nameof(handler));
 
-        var binding = new EventBinding<T>(handler);
-        Register(binding, owner, autoDeregisterOnOwnerDestroyed);
-        return new EventSubscription<T>(binding);
+        return AddBinding(handler, null, owner, autoDeregisterOnOwnerDestroyed);
     }
 
     public static EventSubscription<T> Subscribe(Action handler, UnityEngine.Object owner = null, bool autoDeregisterOnOwnerDestroyed = true)
@@ -46,23 +21,30 @@ public static class EventBus<T> where T : IEvent
         if (handler == null)
             throw new ArgumentNullException(nameof(handler));
 
-        var binding = new EventBinding<T>(handler);
-        Register(binding, owner, autoDeregisterOnOwnerDestroyed);
-        return new EventSubscription<T>(binding);
+        return AddBinding(null, handler, owner, autoDeregisterOnOwnerDestroyed);
     }
 
-    public static void Deregister(IEventBinding<T> binding)
+    static EventSubscription<T> AddBinding(Action<T> onEvent, Action onEventNoArgs, UnityEngine.Object owner, bool autoDeregisterOnOwnerDestroyed)
     {
-        if (binding == null)
+        PruneDeadBindings();
+
+        var entry = new BindingEntry(onEvent, onEventNoArgs, owner, autoDeregisterOnOwnerDestroyed);
+        bindings.Add(entry);
+        return new EventSubscription<T>(entry);
+    }
+
+    internal static void Deregister(BindingEntry entry)
+    {
+        if (entry == null)
             return;
 
         for (int i = bindings.Count - 1; i >= 0; i--)
         {
-            var entry = bindings[i];
-            if (ReferenceEquals(entry.Binding, binding))
+            var candidate = bindings[i];
+            if (ReferenceEquals(candidate, entry))
             {
                 bindings.RemoveAt(i);
-                entry.MarkDisposed(BindingRemovalReason.Manual, entry.OwnerAliveForWarnings);
+                candidate.MarkDisposed(BindingRemovalReason.Manual, candidate.OwnerAliveForWarnings);
                 return;
             }
         }
@@ -72,7 +54,6 @@ public static class EventBus<T> where T : IEvent
     {
         PruneDeadBindings();
 
-        // Snapshot current bindings to allow modifications during invocation.
         var snapshot = bindings.ToArray();
         for (int i = 0; i < snapshot.Length; i++)
         {
@@ -109,7 +90,7 @@ public static class EventBus<T> where T : IEvent
         }
     }
 
-    enum BindingRemovalReason
+    internal enum BindingRemovalReason
     {
         None,
         Manual,
@@ -117,9 +98,10 @@ public static class EventBus<T> where T : IEvent
         OwnerDestroyed
     }
 
-    sealed class BindingEntry
+    internal sealed class BindingEntry
     {
-        readonly IEventBinding<T> binding;
+        readonly Action<T> onEvent;
+        readonly Action onEventNoArgs;
         readonly UnityEngine.Object ownerReference;
         readonly bool ownerSupplied;
         readonly bool autoDeregisterOnOwnerDestroyed;
@@ -131,9 +113,10 @@ public static class EventBus<T> where T : IEvent
 
         bool disposed;
 
-        public BindingEntry(IEventBinding<T> binding, UnityEngine.Object ownerReference, bool autoDeregisterOnOwnerDestroyed)
+        public BindingEntry(Action<T> onEvent, Action onEventNoArgs, UnityEngine.Object ownerReference, bool autoDeregisterOnOwnerDestroyed)
         {
-            this.binding = binding;
+            this.onEvent = onEvent;
+            this.onEventNoArgs = onEventNoArgs;
             this.ownerReference = ownerReference;
             this.autoDeregisterOnOwnerDestroyed = autoDeregisterOnOwnerDestroyed;
             ownerSupplied = ownerReference != null;
@@ -143,16 +126,14 @@ public static class EventBus<T> where T : IEvent
 #endif
         }
 
-        public IEventBinding<T> Binding => binding;
-
         public bool ShouldAutoPrune => autoDeregisterOnOwnerDestroyed && ownerSupplied && ownerReference == null;
 
         public bool OwnerAliveForWarnings => ownerSupplied ? ownerReference != null : true;
 
         public void Invoke(T @event)
         {
-            binding.OnEvent?.Invoke(@event);
-            binding.OnEventNoArgs?.Invoke();
+            onEvent?.Invoke(@event);
+            onEventNoArgs?.Invoke();
         }
 
         public void MarkDisposed(BindingRemovalReason reason, bool ownerAliveAtRemoval)
@@ -187,7 +168,6 @@ public static class EventBus<T> where T : IEvent
             if (reason == BindingRemovalReason.Manual)
                 return false;
 
-            // If no owner was provided, treat it as alive for leak warnings.
             return ownerAliveAtRemoval;
         }
 #endif
@@ -196,10 +176,10 @@ public static class EventBus<T> where T : IEvent
 
 public sealed class EventSubscription<T> : IDisposable where T : IEvent
 {
-    readonly IEventBinding<T> binding;
+    readonly EventBus<T>.BindingEntry binding;
     bool disposed;
 
-    internal EventSubscription(IEventBinding<T> binding)
+    internal EventSubscription(EventBus<T>.BindingEntry binding)
     {
         this.binding = binding;
     }
@@ -213,7 +193,3 @@ public sealed class EventSubscription<T> : IDisposable where T : IEvent
         EventBus<T>.Deregister(binding);
     }
 }
-
-
-
-
