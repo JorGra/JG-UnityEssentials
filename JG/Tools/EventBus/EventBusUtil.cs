@@ -23,7 +23,7 @@ public static class EventBusUtil
     /// when the game enters Play Mode.
     /// The method sets up a subscriber to the playModeStateChanged event to allow
     /// actions to be performed when the Editor's play mode changes.
-    /// </summary>    
+    /// </summary>
     [InitializeOnLoadMethod]
     public static void InitializeEditor()
     {
@@ -36,7 +36,7 @@ public static class EventBusUtil
         PlayModeState = state;
         if (state == PlayModeStateChange.ExitingPlayMode)
         {
-            ClearAllBuses();
+            ClearAllBuses(logLeaks: false);
         }
     }
 #endif
@@ -73,14 +73,21 @@ public static class EventBusUtil
     /// <summary>
     /// Clears (removes all listeners from) all event buses in the application.
     /// </summary>
-    public static void ClearAllBuses()
+    public static void ClearAllBuses(bool logLeaks = true)
     {
+        EventSubscriptionTracker.DisposeAllTrackers();
         Debug.Log("Clearing all buses...");
         for (int i = 0; i < EventBusTypes.Count; i++)
         {
             var busType = EventBusTypes[i];
+            var warnMethod = busType.GetMethod("SetWarnOnClear", BindingFlags.Static | BindingFlags.NonPublic);
+            warnMethod?.Invoke(null, new object[] { logLeaks });
+
             var clearMethod = busType.GetMethod("Clear", BindingFlags.Static | BindingFlags.NonPublic);
             clearMethod?.Invoke(null, null);
         }
     }
 }
+
+
+
