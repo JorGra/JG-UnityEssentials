@@ -6,7 +6,7 @@ namespace JG.Flyweights
     public abstract class FlyweightSettings : ScriptableObject
     {
         public GameObject prefab;
-        public string Name => prefab.name;
+        public string Name => !string.IsNullOrWhiteSpace(name) ? name : prefab.name;
 
         public abstract Flyweight Create();
 
