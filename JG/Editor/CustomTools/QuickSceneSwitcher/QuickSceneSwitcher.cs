@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using JG.Tools.SceneManagement.Editor;
 
 /// <summary>
 /// Editor window for quick switching between build-configured scenes.
@@ -191,14 +191,18 @@ public class QuickSceneSwitcher : EditorWindow
         {
             GUILayout.FlexibleSpace();
 
-            bool bootstrapperEnabled = BootstrapperEditorUtility.IsBootstrapperEnabled;
-            var toggleContent = bootstrapperEnabled ? bootstrapperEnabledIcon : bootstrapperDisabledIcon;
-            if (GUILayout.Button(toggleContent, GUIStyle.none,
-                                 GUILayout.Width(20), GUILayout.Height(20)))
+            // Optional bootstrapper toggle if the adapter can find it
+            if (BootstrapperAdapter.IsAvailable)
             {
-                BootstrapperEditorUtility.IsBootstrapperEnabled = !bootstrapperEnabled;
-                BootstrapperEditorUtility.ApplyBootstrapperSceneSetting();
-                Repaint();
+                bool bootstrapperEnabled = BootstrapperAdapter.IsEnabled;
+                var toggleContent = bootstrapperEnabled ? bootstrapperEnabledIcon : bootstrapperDisabledIcon;
+                if (GUILayout.Button(toggleContent, GUIStyle.none,
+                                     GUILayout.Width(20), GUILayout.Height(20)))
+                {
+                    BootstrapperAdapter.IsEnabled = !bootstrapperEnabled;
+                    BootstrapperAdapter.ApplyBootstrapperSceneSetting();
+                    Repaint();
+                }
             }
 
             // Small reload icon instead of text
@@ -206,9 +210,55 @@ public class QuickSceneSwitcher : EditorWindow
                                  GUILayout.Width(20), GUILayout.Height(20)))
             {
                 Repaint();
-            }
         }
     }
+}
+
+/// <summary>
+/// Reflection-based adapter so the quick switcher can optionally talk to a bootstrapper utility
+/// without hard-referencing the SceneManagement package. If the type is not present, the toggle
+/// simply disappears but the window still works.
+/// </summary>
+internal static class BootstrapperAdapter
+{
+    private static readonly System.Type BootstrapperType =
+        FindType("JG.Tools.SceneManagement.Editor.BootstrapperEditorUtility");
+
+    private static readonly PropertyInfo IsEnabledProp =
+        BootstrapperType?.GetProperty("IsBootstrapperEnabled", BindingFlags.Public | BindingFlags.Static);
+
+    private static readonly MethodInfo ApplyMethod =
+        BootstrapperType?.GetMethod("ApplyBootstrapperSceneSetting", BindingFlags.Public | BindingFlags.Static);
+
+    public static bool IsAvailable => BootstrapperType != null && IsEnabledProp != null;
+
+    public static bool IsEnabled
+    {
+        get => IsAvailable && (bool)(IsEnabledProp?.GetValue(null) ?? false);
+        set
+        {
+            if (IsAvailable)
+                IsEnabledProp?.SetValue(null, value);
+        }
+    }
+
+    public static void ApplyBootstrapperSceneSetting()
+    {
+        ApplyMethod?.Invoke(null, null);
+    }
+
+    private static System.Type FindType(string fullName)
+    {
+        // Search all loaded assemblies to avoid needing an explicit asmdef reference
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType(fullName, throwOnError: false, ignoreCase: false);
+            if (t != null)
+                return t;
+        }
+        return null;
+    }
+}
 
     private void LoadScene(string scenePath)
     {

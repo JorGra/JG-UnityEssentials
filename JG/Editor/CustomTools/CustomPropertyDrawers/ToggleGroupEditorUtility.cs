@@ -4,7 +4,7 @@ using UnityEditor;
 
 namespace UI.Tools.Editor.CustomPropertyDrawers
 {
-    static class ToggleGroupEditorUtility
+    public static class ToggleGroupEditorUtility
     {
 
         public static bool ShouldDisplay(SerializedProperty property, FieldInfo fieldInfo)
