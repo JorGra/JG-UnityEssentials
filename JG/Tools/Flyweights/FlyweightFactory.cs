@@ -66,14 +66,17 @@ namespace JG.Flyweights
 
             if (pools.TryGetValue(settings.Name, out IObjectPool<Flyweight> pool)) return pool;
 
+            int capacity = settings.poolDefaultCapacity > 0 ? settings.poolDefaultCapacity : defaultCapacity;
+            int max = settings.poolMaxSize > 0 ? settings.poolMaxSize : maxPoolSize;
+
             pool = new ObjectPool<Flyweight>(
                 settings.Create,
                 settings.OnGet,
                 settings.OnRelease,
                 settings.OnDestroyPoolObject,
                 collectionCheck,
-                defaultCapacity,
-                maxPoolSize
+                capacity,
+                max
             );
             pools.Add(settings.Name, pool);
             return pool;

@@ -6,6 +6,13 @@ namespace JG.Flyweights
     public abstract class FlyweightSettings : ScriptableObject
     {
         public GameObject prefab;
+
+        [Tooltip("Initial pool capacity. If <= 0, uses factory default.")]
+        public int poolDefaultCapacity = -1;
+
+        [Tooltip("Maximum pool size. If <= 0, uses factory default.")]
+        public int poolMaxSize = -1;
+
         public string Name => !string.IsNullOrWhiteSpace(name) ? name : prefab.name;
 
         public abstract Flyweight Create();
