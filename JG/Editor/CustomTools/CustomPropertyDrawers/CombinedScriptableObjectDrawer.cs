@@ -24,7 +24,7 @@ public class CombinedScriptableObjectDrawer : PropertyDrawer
     {
         // 1) Generate a unique key for this property to store/retrieve foldout state.
         //    We combine the current object’s InstanceID and property path.
-        string key = property.serializedObject.targetObject.GetInstanceID() + "_" + property.propertyPath;
+        string key = property.serializedObject.targetObject.GetEntityId() + "_" + property.propertyPath;
 
         // 2) Before drawing, see if we already have a stored foldout state. If we do,
         //    update our local 'foldout' from the dictionary. Otherwise, keep the
@@ -158,7 +158,7 @@ public class CombinedScriptableObjectDrawer : PropertyDrawer
         float height = EditorGUIUtility.singleLineHeight;
 
         // 1) Generate the same key we used in OnGUI
-        string key = property.serializedObject.targetObject.GetInstanceID() + "_" + property.propertyPath;
+        string key = property.serializedObject.targetObject.GetEntityId() + "_" + property.propertyPath;
 
         // 2) See if we have a recorded foldout state. If yes, override the local foldout.
         bool storedFoldout;

@@ -48,7 +48,7 @@ internal static class TextToTMPContextMenu
         tmp.enableAutoSizing = false;
 
         // wrapping equivalents
-        tmp.enableWordWrapping = hWrap == HorizontalWrapMode.Wrap;
+        tmp.textWrappingMode = hWrap == HorizontalWrapMode.Wrap ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;
         if (vWrap == VerticalWrapMode.Truncate)
             tmp.overflowMode = TextOverflowModes.Truncate;
         else

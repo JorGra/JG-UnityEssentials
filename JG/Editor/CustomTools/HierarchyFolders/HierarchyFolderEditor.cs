@@ -9,12 +9,12 @@ public static class HierarchyFolderEditor
 {
     static HierarchyFolderEditor()
     {
-        EditorApplication.hierarchyWindowItemOnGUI += OnHierarchyWindowItemGUI;
+        EditorApplication.hierarchyWindowItemByEntityIdOnGUI += OnHierarchyWindowItemGUI;
     }
 
-    private static void OnHierarchyWindowItemGUI(int instanceID, Rect rowRect)
+    private static void OnHierarchyWindowItemGUI(EntityId entityId, Rect rowRect)
     {
-        var go = EditorUtility.InstanceIDToObject(instanceID) as GameObject;
+        var go = EditorUtility.EntityIdToObject(entityId) as GameObject;
         if (go == null) return;
 
         var comp = go.GetComponent<HierarchyFolder>();

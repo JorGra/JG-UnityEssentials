@@ -16,8 +16,8 @@ public class HoverMaterialPreviewDrawer : PropertyDrawer
     // -----------------------------------------------------------------------
     // Per-editor-session caches
     // -----------------------------------------------------------------------
-    static readonly Dictionary<int, Texture> s_PreviewCache = new();       // matID → preview
-    static readonly Dictionary<int, bool> s_LoadingFlag = new();       // matID → waiting?
+    static readonly Dictionary<EntityId, Texture> s_PreviewCache = new();       // matID → preview
+    static readonly Dictionary<EntityId, bool> s_LoadingFlag = new();       // matID → waiting?
     static Mesh s_SphereMesh;                 // hi-poly sphere
 
     // -----------------------------------------------------------------------
@@ -70,7 +70,7 @@ public class HoverMaterialPreviewDrawer : PropertyDrawer
     // -----------------------------------------------------------------------
     static bool TryGetPreview(Material mat, out Texture tex)
     {
-        int id = mat.GetInstanceID();
+        EntityId id = mat.GetEntityId();
 
         // Already cached?
         if (s_PreviewCache.TryGetValue(id, out tex))
